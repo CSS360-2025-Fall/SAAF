@@ -1,16 +1,7 @@
-const {
-  initializeApp,
-  applicationDefault,
-  cert,
-} = require("firebase-admin/app");
-const {
-  getFirestore,
-  Timestamp,
-  FieldValue,
-  Filter,
-} = require("firebase-admin/firestore");
+import { initializeApp, cert } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
 
-const serviceAccount = require("../saaf-db-firebase-adminsdk-key.json");
+import { serviceAccount } from "../saaf-db-firebase-adminsdk-key.json";
 
 initializeApp({
   credential: cert(serviceAccount),
