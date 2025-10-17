@@ -10,7 +10,7 @@ const {
   Filter,
 } = require("firebase-admin/firestore");
 
-const serviceAccount = require("./saaf-db-firebase-adminsdk-key.json");
+const serviceAccount = require("../saaf-db-firebase-adminsdk-key.json");
 
 initializeApp({
   credential: cert(serviceAccount),
