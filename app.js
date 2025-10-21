@@ -1,5 +1,5 @@
-import 'dotenv/config';
-import express from 'express';
+import "dotenv/config";
+import express from "express";
 import {
   ButtonStyleTypes,
   InteractionResponseFlags,
@@ -7,9 +7,11 @@ import {
   InteractionType,
   MessageComponentTypes,
   verifyKeyMiddleware,
-} from 'discord-interactions';
-import { getRandomEmoji, DiscordRequest } from './utils.js';
-import { getShuffledOptions, getResult } from './game.js';
+} from "discord-interactions";
+import { getRandomEmoji, DiscordRequest } from "./utils.js";
+import { getShuffledOptions, getResult } from "./game.js";
+import { incrementCommandUsage } from "./db/commandUsage.js";
+import { ALL_COMMANDS } from "./commands.js";
 
 // Create an express app
 const app = express();
@@ -22,49 +24,53 @@ const activeGames = {};
  * Interactions endpoint URL where Discord will send HTTP requests
  * Parse request body and verifies incoming requests using discord-interactions package
  */
-app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async function (req, res) {
-  // Interaction id, type and data
-  const { id, type, data } = req.body;
+app.post(
+  "/interactions",
+  verifyKeyMiddleware(process.env.PUBLIC_KEY),
+  async function (req, res) {
+    // Interaction id, type and data
+    const { id, type, data } = req.body;
 
-  /**
-   * Handle verification requests
-   */
-  if (type === InteractionType.PING) {
-    return res.send({ type: InteractionResponseType.PONG });
-  }
-
-  /**
-   * Handle slash command requests
-   * See https://discord.com/developers/docs/interactions/application-commands#slash-commands
-   */
-  if (type === InteractionType.APPLICATION_COMMAND) {
-    const { name } = data;
-
-    // "test" command
-    if (name === 'test') {
-      // "challenge" command
-
-      // Send a message into the channel where command was triggered from
-      return res.send({
-        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: {
-          flags: InteractionResponseFlags.IS_COMPONENTS_V2,
-          components: [
-            {
-              type: MessageComponentTypes.TEXT_DISPLAY,
-              // Fetches a random emoji to send from a helper function
-              content: `hello world ${getRandomEmoji()}`
-            }
-          ]
-        },
-      });
+    /**
+     * Handle verification requests
+     */
+    if (type === InteractionType.PING) {
+      return res.send({ type: InteractionResponseType.PONG });
     }
 
-    if (name === 'challenge' && id) {
-        // Interaction context
-        const context = req.body.context;
-        // User ID is in user field for (G)DMs, and member for servers
-        const userId = context === 0 ? req.body.member.user.id : req.body.user.id;
+    /**
+     * Handle slash command requests
+     * See https://discord.com/developers/docs/interactions/application-commands#slash-commands
+     */
+    if (type === InteractionType.APPLICATION_COMMAND) {
+      const { name } = data;
+      // Interaction context
+      const context = req.body.context;
+      // User ID is in user field for (G)DMs, and member for servers
+      const userId = context === 0 ? req.body.member.user.id : req.body.user.id;
+
+      // "test" command
+      if (name === "test") {
+        // ALL_COMMANDS[0] is the test command
+        incrementCommandUsage(userId, ALL_COMMANDS[0]);
+
+        // Send a message into the channel where command was triggered from
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            flags: InteractionResponseFlags.IS_COMPONENTS_V2,
+            components: [
+              {
+                type: MessageComponentTypes.TEXT_DISPLAY,
+                // Fetches a random emoji to send from a helper function
+                content: `hello world ${getRandomEmoji()}`,
+              },
+            ],
+          },
+        });
+      }
+
+      if (name === "challenge" && id) {
         // User's object choice
         const objectName = req.body.data.options[0].value;
 
@@ -73,6 +79,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           id: userId,
           objectName,
         };
+
+        // ALL_COMMANDS[1] is the challenge command
+        incrementCommandUsage(userId, ALL_COMMANDS[1]);
 
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -91,7 +100,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
                     type: MessageComponentTypes.BUTTON,
                     // Append the game ID to use later on
                     custom_id: `accept_button_${req.body.id}`,
-                    label: 'Accept',
+                    label: "Accept",
                     style: ButtonStyleTypes.PRIMARY,
                   },
                 ],
@@ -101,19 +110,17 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
         });
       }
 
-    console.error(`unknown command: ${name}`);
-    return res.status(400).json({ error: 'unknown command' });
-  }
+      console.error(`unknown command: ${name}`);
+      return res.status(400).json({ error: "unknown command" });
+    }
 
-  
-
-  if (type === InteractionType.MESSAGE_COMPONENT) {
+    if (type === InteractionType.MESSAGE_COMPONENT) {
       // custom_id set in payload when sending message component
       const componentId = data.custom_id;
 
-      if (componentId.startsWith('accept_button_')) {
+      if (componentId.startsWith("accept_button_")) {
         // get the associated game ID
-        const gameId = componentId.replace('accept_button_', '');
+        const gameId = componentId.replace("accept_button_", "");
         // Delete message with token in request body
         const endpoint = `webhooks/${process.env.APP_ID}/${req.body.token}/messages/${req.body.message.id}`;
         try {
@@ -121,11 +128,13 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
             data: {
               // Indicates it'll be an ephemeral message
-              flags: InteractionResponseFlags.EPHEMERAL | InteractionResponseFlags.IS_COMPONENTS_V2,
+              flags:
+                InteractionResponseFlags.EPHEMERAL |
+                InteractionResponseFlags.IS_COMPONENTS_V2,
               components: [
                 {
                   type: MessageComponentTypes.TEXT_DISPLAY,
-                  content: 'What is your object of choice?',
+                  content: "What is your object of choice?",
                 },
                 {
                   type: MessageComponentTypes.ACTION_ROW,
@@ -142,20 +151,21 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
             },
           });
           // Delete previous message
-          await DiscordRequest(endpoint, { method: 'DELETE' });
+          await DiscordRequest(endpoint, { method: "DELETE" });
         } catch (err) {
-          console.error('Error sending message:', err);
+          console.error("Error sending message:", err);
         }
-      } else if (componentId.startsWith('select_choice_')) {
+      } else if (componentId.startsWith("select_choice_")) {
         // get the associated game ID
-        const gameId = componentId.replace('select_choice_', '');
+        const gameId = componentId.replace("select_choice_", "");
 
         if (activeGames[gameId]) {
           // Interaction context
           const context = req.body.context;
           // Get user ID and object choice for responding user
           // User ID is in user field for (G)DMs, and member for servers
-          const userId = context === 0 ? req.body.member.user.id : req.body.user.id;
+          const userId =
+            context === 0 ? req.body.member.user.id : req.body.user.id;
           const objectName = data.values[0];
           // Calculate result from helper function
           const resultStr = getResult(activeGames[gameId], {
@@ -177,25 +187,25 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
                 components: [
                   {
                     type: MessageComponentTypes.TEXT_DISPLAY,
-                    content: resultStr
-                  }
-                ]
-                },
+                    content: resultStr,
+                  },
+                ],
+              },
             });
             // Update ephemeral message
             await DiscordRequest(endpoint, {
-              method: 'PATCH',
+              method: "PATCH",
               body: {
                 components: [
                   {
                     type: MessageComponentTypes.TEXT_DISPLAY,
-                    content: 'Nice choice ' + getRandomEmoji()
-                  }
+                    content: "Nice choice " + getRandomEmoji(),
+                  },
                 ],
               },
             });
           } catch (err) {
-            console.error('Error sending message:', err);
+            console.error("Error sending message:", err);
           }
         }
       }
@@ -203,10 +213,11 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       return;
     }
 
-  console.error('unknown interaction type', type);
-  return res.status(400).json({ error: 'unknown interaction type' });
-});
+    console.error("unknown interaction type", type);
+    return res.status(400).json({ error: "unknown interaction type" });
+  }
+);
 
 app.listen(PORT, () => {
-  console.log('Listening on port', PORT);
+  console.log("Listening on port", PORT);
 });
