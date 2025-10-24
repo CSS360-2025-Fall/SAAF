@@ -21,6 +21,15 @@ const PORT = process.env.PORT || 3000;
 // To keep track of our active games
 const activeGames = {};
 
+// --- CODE ADDED ---
+// Simple array of jokes for the /joke command
+const jokes = [
+  "Why do JavaScript developers wear glasses? Because they don't C#!",
+  "What's the object-oriented way to become wealthy? Inheritance.",
+  "Why did the programmer quit his job? Because he didn't get arrays.",
+];
+// --- END OF ADDED CODE ---
+
 const COMPUTER_ID = "RPS_COMPUTER";
 const COMPUTER_NAME = "Computer";
 
@@ -70,7 +79,7 @@ app.post(
      * See https://discord.com/developers/docs/interactions/application-commands#slash-commands
      */
     if (type === InteractionType.APPLICATION_COMMAND) {
-      const { name } = data;
+      const { name, options } = data; // 'options' is needed for joke command
       // Interaction context
       const context = req.body.context;
       // User ID is in user field for (G)DMs, and member for servers
@@ -143,6 +152,42 @@ app.post(
           },
         });
       }
+
+      // --- JOKE COMMAND LOGIC ADDED HERE ---
+      if (name === "joke") {
+        // Find the joke command to pass to increment
+        const jokeCommand = ALL_COMMANDS.find((cmd) => cmd.name === "joke");
+        if (jokeCommand) {
+          incrementCommandUsage(userId, jokeCommand);
+        }
+
+        let jokeContent;
+        // Check if the user provided a number option
+        const choiceOption = options?.find((opt) => opt.name === "number");
+
+        if (choiceOption) {
+          const choice = choiceOption.value;
+          if (choice >= 1 && choice <= jokes.length) {
+            // Adjust for 0-based array index
+            jokeContent = `Joke #${choice}: ${jokes[choice - 1]}`;
+          } else {
+            jokeContent = `Sorry, I only have ${jokes.length} jokes. Please pick a number between 1 and ${jokes.length}.`;
+          }
+        } else {
+          // If no number is provided, pick a random joke
+          const randomIndex = Math.floor(Math.random() * jokes.length);
+          jokeContent = jokes[randomIndex];
+        }
+
+        // Send the joke back to the channel
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: jokeContent,
+          },
+        });
+      }
+      // --- END OF ADDED JOKE LOGIC ---
 
       console.error(`unknown command: ${name}`);
       return res.status(400).json({ error: "unknown command" });
