@@ -21,6 +21,24 @@ const PORT = process.env.PORT || 3000;
 // To keep track of our active games
 const activeGames = {};
 
+// -------------------------
+// Bot theme and rules
+// -------------------------
+const BOT_THEME = {
+  description: "A fun Discord bot to play quick games like Rock Paper Scissors with friends!",
+  rules: [
+    "Be respectful to other players.",
+    "No spamming buttons or options.",
+    "Only use commands in the proper channels.",
+    "Have fun and enjoy random surprises 😄",
+    "The bot is meant for casual gaming; results are just for fun!"
+  ],
+  exampleCommands: [
+    "/test - Test the bot's response",
+    "/challenge <choice> - Start a Rock Paper Scissors game with a friend"
+  ]
+};
+
 // --- CODE ADDED ---
 // Simple array of jokes for the /joke command
 const jokes = [
@@ -152,6 +170,26 @@ app.post(
           },
         });
       }
+
+      if (name === "rules") {
+        return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          embeds: [
+            {
+              title: "Bot Theme & Rules",
+              description: BOT_THEME.description,
+              fields: [
+                { name: "Rules", value: BOT_THEME.rules.map((r,i)=>`${i+1}. ${r}`).join('\n') },
+                { name: "Example Commands", value: BOT_THEME.exampleCommands.join('\n') }
+              ],
+              color: 0x00ff00
+            }
+          ]
+        }
+      }
+    );
+  }
 
       // --- JOKE COMMAND LOGIC ADDED HERE ---
       if (name === "joke") {

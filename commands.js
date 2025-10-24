@@ -64,6 +64,13 @@ const JOKE_COMMAND = {
 };
 // --- END OF ADDED CODE ---
 
-export const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, JOKE_COMMAND]; // <-- JOKE_COMMAND added
+const RULES_COMMAND = {
+    name: 'rules',
+    description: 'Show the bot theme, rules, and example commands',
+    type: 1,
+    integration_types: [0, 1],
+    contexts: [0, 1, 2],
+};
 
+export const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, JOKE_COMMAND, RULES_COMMAND];
 InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
