@@ -7,11 +7,11 @@
 ## Project Structure
 This project uses several files that make the Discord bot work smoothly. app.js runs the **Express server, handles commands** like /test, /challenge, and /joke, and manages active games. commands.js sets up and **registers** the bot’s **slash commands** so users can use them in chats. game.js runs the Rock-Paper-Scissors-style **game logic** and decides the winner. utils.js holds **helper functions** like sending API requests, registering commands, and formatting text. The .env file safely stores **secret info** like the bot token and app ID. package-lock.json keeps **dependency versions** consistent, while package.json lists the bot’s setup, **libraries**, and scripts. Lastly, renovate.json controls automatic dependency updates.
 
-![Ngrok Diagram](https://i.ibb.co/9mwJRgvq/Screenshot-2025-10-24-at-10-43-03-PM.png)
-
 ## Ngrok
 
 **Ngrok** is an **indispensable** development **tool** that directly enables our bot's entire **system architecture** by creating a secure "**tunnel**" from the **public internet** to our app.js server, which is running privately on our **localhost:3000**. It works by generating a unique, temporary **public URL** (like https://random.ngrok.io) that we **register** with Discord as our single "**Interactions Endpoint**." When a user runs a command like /joke, **Discord's servers** send an **HTTP POST request** to that public ngrok URL, which ngrok instantly and securely **forwards** to our local app.js server's **/interactions** endpoint. This is absolutely **essential** because Discord's public servers cannot otherwise access localhost. The **primary benefit** is **rapid development**: this **bridge** allows our **local code** to **receive real, live events** from Discord, letting us test our changes **immediately** in the app **without having to deploy** our entire project to a **live web server** every time we fix a bug or add a feature.
+
+![Ngrok Diagram](https://i.ibb.co/9mwJRgvq/Screenshot-2025-10-24-at-10-43-03-PM.png)
 
 ## Node.js
 
