@@ -1,5 +1,7 @@
 # Architectural Guide
 
+**[Our Architecture Diagram](https://github.com/CSS360-2025-Fall/SAAF/blob/20e11ea9162876c9a13c854384a747808e2be3e4/architecture.png)**
+
 ## Project Structure
 
 ## Ngrok
