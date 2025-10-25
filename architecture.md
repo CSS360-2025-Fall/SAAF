@@ -2,8 +2,12 @@
 
 **[Our Architecture Diagram](https://github.com/CSS360-2025-Fall/SAAF/blob/20e11ea9162876c9a13c854384a747808e2be3e4/architecture.png)**
 
+![Project Structure Diagram](https://i.ibb.co/pccyLmh/Screenshot-2025-10-24-at-10-43-22-PM.png)
+
 ## Project Structure
 This project uses several files that make the Discord bot work smoothly. app.js runs the **Express server, handles commands** like /test, /challenge, and /joke, and manages active games. commands.js sets up and **registers** the bot’s **slash commands** so users can use them in chats. game.js runs the Rock-Paper-Scissors-style **game logic** and decides the winner. utils.js holds **helper functions** like sending API requests, registering commands, and formatting text. The .env file safely stores **secret info** like the bot token and app ID. package-lock.json keeps **dependency versions** consistent, while package.json lists the bot’s setup, **libraries**, and scripts. Lastly, renovate.json controls automatic dependency updates.
+
+![Ngrok Diagram](https://i.ibb.co/9mwJRgvq/Screenshot-2025-10-24-at-10-43-03-PM.png)
 
 ## Ngrok
 
