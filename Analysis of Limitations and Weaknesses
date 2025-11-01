@@ -22,3 +22,11 @@ violating a key design principle for "sticky" applications. There are no interac
 opponent) or a "View Leader board" button. This forces the user to re-invoke the /challenge slash command manually, adding friction and breaking the engagement loop.
 This gap represents a failure to anticipate the user's next logical action. By not providing interactive "next steps," the bot misses a crucial opportunity to retain users and
 encourage sequential, "just-one-more-game" sessions.
+the most.
+These issues show the kind of technical debt that builds up when a project grows quickly without structure. It connects to what we talked
+about in class: making code maintainable and testable instead of patching fixes as we go.
+ESLint:
+- Poor data sanitization before inserting to DB (unsafe operations)
+  - There should be some sort of rate limiting on the ability to modify the database in any way. As it stands, the database is secure, but there could potentially be a spam/DOS attack that we would have no way of dealing with.
+- ESLint is unhappy with the complexity of our app.js file. This could cause security issues and general extensibility issues in the future.
+  - Would be best to abstract some of the command logic/command handling out to a separate file to make it more readable and extensible for everyone in the future.
