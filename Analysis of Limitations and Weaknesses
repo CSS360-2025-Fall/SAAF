@@ -1,12 +1,16 @@
 - Hard-coded game rules: A lot of the game values and responses are written directly into the command files. If we ever want to change the
   rules or add new games, we’d have to manually edit multiple parts of the code instead of adjusting them in one place.
+
 - Lack of modular code: Each game’s logic is kind of tied into the main bot commands instead of being separated into modules. This makes it
   harder to reuse or add new games since we’d have to rewrite or copy a lot of the same logic.
+
 - No automated testing: There aren’t any tests to check if the slash commands or game logic are working correctly. This means if we change
   something, we might break another feature without noticing.
+
 - No logging: The bot doesn’t log errors or track how often commands are used, so it’s hard to debug problems or see what games people play
   the most.
-  These issues show the kind of technical debt that builds up when a project grows quickly without structure. It connects to what we talked
+
+- These issues show the kind of technical debt that builds up when a project grows quickly without structure. It connects to what we talked
   about in class: making code maintainable and testable instead of patching fixes as we go.
 
 UI/UX and Engagement:
@@ -23,10 +27,18 @@ opponent) or a "View Leader board" button. This forces the user to re-invoke the
 This gap represents a failure to anticipate the user's next logical action. By not providing interactive "next steps," the bot misses a crucial opportunity to retain users and
 encourage sequential, "just-one-more-game" sessions.
 the most.
-These issues show the kind of technical debt that builds up when a project grows quickly without structure. It connects to what we talked
-about in class: making code maintainable and testable instead of patching fixes as we go.
+
+- Finally, a significant piece of technical debt directly undermines long-term user engagement and constitutes a functional bug. The winLoss record-keeping system (app.js, line 23) 
+is implemented as an in-memory JavaScript object. This architectural flaw means all user statistics—a primary driver for repeated play—are wiped every time the bot restarts or deploys.
+This makes the "Records" feature (lines 289, 384) misleading and ultimately useless for retention. The project already includes firebase-admin as a dependency (package.json), 
+but it is not used for persisting game state. Refactoring this to store win/loss records in a persistent database (like Firestore) is a high-priority task to fix this data-integrity bug 
+and provide a meaningful, long-term engagement hook.
+
 ESLint:
+
 - Poor data sanitization before inserting to DB (unsafe operations)
-  - There should be some sort of rate limiting on the ability to modify the database in any way. As it stands, the database is secure, but there could potentially be a spam/DOS attack that we would have no way of dealing with.
+  - There should be some sort of rate limiting on the ability to modify the database in any way. As it stands, the database is secure, but there could potentially be a spam/DOS attack 
+    that we would have no way of dealing with.
+
 - ESLint is unhappy with the complexity of our app.js file. This could cause security issues and general extensibility issues in the future.
   - Would be best to abstract some of the command logic/command handling out to a separate file to make it more readable and extensible for everyone in the future.
