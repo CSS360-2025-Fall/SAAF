@@ -12,3 +12,4 @@ ESLint:
 - Poor data sanitization before inserting to DB (unsafe operations)
   - There should be some sort of rate limiting on the ability to modify the database in any way. As it stands, the database is secure, but there could potentially be a spam/DOS attack that we would have no way of dealing with.
 - ESLint is unhappy with the complexity of our app.js file. This could cause security issues and general extensibility issues in the future.
+  - Would be best to abstract some of the command logic/command handling out to a separate file to make it more readable and extensible for everyone in the future.
