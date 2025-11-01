@@ -1,4 +1,5 @@
 Aditi 
+
 User Story 1: Require Authentication for Private Discord Games
 
 As a Discord user who wants to host or join a private game, I want the bot to make sure that only invited or authorized players can access private sessions, so that my game data and conversations stay secure and I don’t have to worry about strangers joining. The bot should check users’ Discord IDs or server roles before letting them in, and politely block anyone who isn’t authorized with a clear message. At the same time, any logs the bot creates shouldn’t include personal information like tokens or private messages, keeping everything safe and compliant with Discord’s data rules. This way, players can trust that private games really are private, and the server stays secure from unwanted interruptions or bad actors.
