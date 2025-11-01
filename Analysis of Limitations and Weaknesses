@@ -8,3 +8,5 @@ something, we might break another feature without noticing.
 the most.
 These issues show the kind of technical debt that builds up when a project grows quickly without structure. It connects to what we talked
 about in class: making code maintainable and testable instead of patching fixes as we go.
+- Poor data sanitazation before inserting to DB
+- ESLint is unhappy with the complexity of our app.js file. This could cause security issues and general extensibility issues in the future.
