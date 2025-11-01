@@ -11,6 +11,14 @@
 
 UI/UX and Engagement:
 
-- An analysis of the bot's UI/UX reveals a significant gap in user engagement stemming from inconsistent visual feedback. While the /rules command effectively uses a Discord Embed (app.js, line 214) to present information clearly, this design pattern is critically absent from the core game loop. The results for both player-vs-computer (line 283) and player-vs-player (line 381) games are delivered as dense, unformatted text within a basic TEXT_DISPLAY component. This not only creates a jarring and unprofessional user experience but also fails to meet the non-functional requirements of usability and engagement. The game's climax—the result—should be visually rewarding. Using embeds with colors (e.g., green for a win, red for a loss), emojis, or even images for the choices would make the bot feel more polished and significantly improve player satisfaction.
+- An analysis of the bot's UI/UX reveals a significant gap in user engagement stemming from inconsistent visual feedback. While the /rules command effectively uses a Discord Embed 
+(app.js, line 214) to present information clearly, this design pattern is critically absent from the core game loop. The results for both player-vs-computer (line 283) 
+and player-vs-player (line 381) games are delivered as dense, unformatted text within a basic TEXT_DISPLAY component. This not only creates a jarring and unprofessional user experience
+but also fails to meet the non-functional requirements of usability and engagement. The game's climax—the result—should be visually rewarding. Using embeds with colors 
+(e.g., green for a win, red for a loss), emojis, or even images for the choices would make the bot feel more polished and significantly improve player satisfaction.
 
-- Furthermore, the bot's engagement model is currently transactional rather than relational. The interaction flow terminates immediately after a single game's result is posted, violating a key design principle for "sticky" applications. There are no interactive components, such as a "Play Again" button (which could re-initiate the challenge with the same opponent) or a "View Leader board" button. This forces the user to re-invoke the /challenge slash command manually, adding friction and breaking the engagement loop. This gap represents a failure to anticipate the user's next logical action. By not providing interactive "next steps," the bot misses a crucial opportunity to retain users and encourage sequential, "just-one-more-game" sessions.
+- Furthermore, the bot's engagement model is currently transactional rather than relational. The interaction flow terminates immediately after a single game's result is posted, 
+violating a key design principle for "sticky" applications. There are no interactive components, such as a "Play Again" button (which could re-initiate the challenge with the same 
+opponent) or a "View Leader board" button. This forces the user to re-invoke the /challenge slash command manually, adding friction and breaking the engagement loop.
+This gap represents a failure to anticipate the user's next logical action. By not providing interactive "next steps," the bot misses a crucial opportunity to retain users and
+encourage sequential, "just-one-more-game" sessions.
