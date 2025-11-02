@@ -45,6 +45,13 @@ ESLint:
 
 Security & Privacy 
 
+Our game bot works well for simple games, but it has a few security and privacy issues that could cause problems if more people start using it. Right now, the bot 
+might log information like usernames or messages, which could expose personal data if the logs aren’t handled carefully. There’s also no system to control who can 
+join private games, so anyone on the server could enter even if they weren’t invited. On top of that, the bot doesn’t have any rate limiting, which means someone 
+could spam commands like /play and slow it down or even crash it. Finally, users and admins don’t really have a way to see or control what data the bot keeps.
+Adding features like authentication for private games, cooldowns between commands, and safer logging would make the bot more secure, protect users’ privacy, and 
+overall make it feel more trustworthy to use.
+
 User Story 1: Require Authentication for Private Discord Games
 
 As a Discord user who wants to host or join a private game, I want the bot to make sure that only invited or authorized players can access private sessions, so that
