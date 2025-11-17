@@ -12,6 +12,7 @@ import { getRandomEmoji, DiscordRequest } from "./utils.js";
 import { getShuffledOptions, getResult } from "./game.js";
 import { incrementCommandUsage } from "./db/commandUsage.js";
 import { ALL_COMMANDS } from "./commands.js";
+import { process } from "node:process";
 
 const winLoss = Object.create(null);
 // Create an express app
@@ -25,18 +26,19 @@ const activeGames = {};
 // Bot theme and rules
 // -------------------------
 const BOT_THEME = {
-  description: "A fun Discord bot to play quick games like Rock Paper Scissors with friends!",
+  description:
+    "A fun Discord bot to play quick games like Rock Paper Scissors with friends!",
   rules: [
     "Be respectful to other players.",
     "No spamming buttons or options.",
     "Only use commands in the proper channels.",
     "Have fun and enjoy random surprises 😄",
-    "The bot is meant for casual gaming; results are just for fun!"
+    "The bot is meant for casual gaming; results are just for fun!",
   ],
   exampleCommands: [
     "/test - Test the bot's response",
-    "/challenge <choice> - Start a Rock Paper Scissors game with a friend"
-  ]
+    "/challenge <choice> - Start a Rock Paper Scissors game with a friend",
+  ],
 };
 
 // --- CODE ADDED ---
@@ -126,8 +128,6 @@ app.post(
 
       // "challenge" command
       if (name === "challenge" && id) {
-        // Interaction context
-        const context = req.body.context;
         // User ID is in user field for (G)DMs, and member for servers
         const userId = req.body.member?.user?.id ?? req.body.user?.id;
         // User's object choice
@@ -173,23 +173,30 @@ app.post(
 
       if (name === "rules") {
         return res.send({
-        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: {
-          embeds: [
-            {
-              title: "Bot Theme & Rules",
-              description: BOT_THEME.description,
-              fields: [
-                { name: "Rules", value: BOT_THEME.rules.map((r,i)=>`${i+1}. ${r}`).join('\n') },
-                { name: "Example Commands", value: BOT_THEME.exampleCommands.join('\n') }
-              ],
-              color: 0x00ff00
-            }
-          ]
-        }
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            embeds: [
+              {
+                title: "Bot Theme & Rules",
+                description: BOT_THEME.description,
+                fields: [
+                  {
+                    name: "Rules",
+                    value: BOT_THEME.rules
+                      .map((r, i) => `${i + 1}. ${r}`)
+                      .join("\n"),
+                  },
+                  {
+                    name: "Example Commands",
+                    value: BOT_THEME.exampleCommands.join("\n"),
+                  },
+                ],
+                color: 0x00ff00,
+              },
+            ],
+          },
+        });
       }
-    );
-  }
 
       // --- JOKE COMMAND LOGIC ADDED HERE ---
       if (name === "joke") {
@@ -351,8 +358,6 @@ app.post(
         const gameId = componentId.replace("select_choice_", "");
 
         if (activeGames[gameId]) {
-          // Interaction context
-          const context = req.body.context;
           // Get user ID and object choice for responding user
           // User ID is in user field for (G)DMs, and member for servers
           const userId = req.body.member?.user?.id ?? req.body.user?.id;

@@ -4,8 +4,8 @@ import { FieldValue } from "firebase-admin/firestore";
 
 export async function incrementCommandUsage(userID, command) {
   if (
-    !command.hasOwnProperty("name") ||
-    !command.hasOwnProperty("contexts") ||
+    !Object.hasOwn(command, "name") ||
+    !Object.hasOwn(command, "contexts") ||
     !ALL_COMMANDS.includes(command)
   ) {
     throw new Error(
