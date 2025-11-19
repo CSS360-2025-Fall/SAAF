@@ -12,7 +12,11 @@ import { getRandomEmoji, DiscordRequest } from "./utils.js";
 import { getShuffledOptions, getResult } from "./game.js";
 import { incrementCommandUsage } from "./db/commandUsage.js";
 import { ALL_COMMANDS } from "./commands.js";
-import { pickWordByLength, pickRandomWord, maskWord } from "./hangman.js";
+import {
+  pickWordByLength,
+  pickRandomWord,
+  maskWord,
+} from "./hangman/hangman.js";
 import process from "node:process";
 
 const winLoss = Object.create(null);
