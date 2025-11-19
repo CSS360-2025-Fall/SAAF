@@ -12,7 +12,8 @@ import { getRandomEmoji, DiscordRequest } from "./utils.js";
 import { getShuffledOptions, getResult } from "./game.js";
 import { incrementCommandUsage } from "./db/commandUsage.js";
 import { ALL_COMMANDS } from "./commands.js";
-import { process } from "node:process";
+import { pickWordByLength, pickRandomWord, maskWord } from "./hangman.js";
+import process from "node:process";
 
 const winLoss = Object.create(null);
 // Create an express app
@@ -21,6 +22,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 // To keep track of our active games
 const activeGames = {};
+// Hangman games stored separately
+const activeHangmanGames = {};
 
 // -------------------------
 // Bot theme and rules
@@ -171,6 +174,110 @@ app.post(
         });
       }
 
+      // "hangman" command
+      if (name === "hangman") {
+        const lengthOption = options?.find((o) => o.name === "number");
+        const requestedLength = lengthOption
+          ? Number(lengthOption.value)
+          : null;
+
+        // pick a word
+        let word = null;
+        if (requestedLength) word = pickWordByLength(requestedLength);
+        if (!word) word = pickRandomWord();
+
+        if (!word) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: "Sorry — no words available right now." },
+          });
+        }
+
+        // create game state
+        const gameId = id; // use interaction id as game id
+        activeHangmanGames[gameId] = {
+          word,
+          guessed: [],
+          wrong: 0,
+          wrongLetters: [],
+          maxWrong: 6,
+          host: userId,
+        };
+
+        // Build letter select options split into two groups (A-M, N-Z)
+        const letters = "abcdefghijklmnopqrstuvwxyz".split("");
+        const guessedSetStart = new Set(activeHangmanGames[gameId].guessed);
+        const first = letters
+          .slice(0, 13)
+          .filter((ch) => !guessedSetStart.has(ch))
+          .map((ch) => ({ label: ch.toUpperCase(), value: ch }));
+        const second = letters
+          .slice(13)
+          .filter((ch) => !guessedSetStart.has(ch))
+          .map((ch) => ({ label: ch.toUpperCase(), value: ch }));
+
+        const masked = maskWord(word, []);
+        const wrongListStrStart = ""; // no wrong letters yet
+
+        // increment usage for hangman command (if registered)
+        const hangmanCmd = ALL_COMMANDS.find((c) => c.name === "hangman");
+        if (hangmanCmd) incrementCommandUsage(userId, hangmanCmd);
+
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            flags: InteractionResponseFlags.IS_COMPONENTS_V2,
+            components: [
+              {
+                type: MessageComponentTypes.TEXT_DISPLAY,
+                content: `Hangman started by <@${userId}> — Word: \`${masked}\`  (wrong: 0/${activeHangmanGames[gameId].maxWrong})${wrongListStrStart}`,
+              },
+              ...(first.length
+                ? [
+                    {
+                      type: MessageComponentTypes.ACTION_ROW,
+                      components: [
+                        {
+                          type: MessageComponentTypes.STRING_SELECT,
+                          custom_id: `hangman_guess_${gameId}_1`,
+                          placeholder: "Guess a letter (A-M)",
+                          options: first,
+                        },
+                      ],
+                    },
+                  ]
+                : []),
+              ...(second.length
+                ? [
+                    {
+                      type: MessageComponentTypes.ACTION_ROW,
+                      components: [
+                        {
+                          type: MessageComponentTypes.STRING_SELECT,
+                          custom_id: `hangman_guess_${gameId}_2`,
+                          placeholder: "Guess a letter (N-Z)",
+                          options: second,
+                        },
+                      ],
+                    },
+                  ]
+                : []),
+              {
+                type: MessageComponentTypes.ACTION_ROW,
+                components: [
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: `hangman_solve_${gameId}`,
+                    label: "Solve",
+                    style: ButtonStyleTypes.SECONDARY,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+      }
+
       if (name === "rules") {
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -238,6 +345,142 @@ app.post(
       return res.status(400).json({ error: "unknown command" });
     }
 
+    // Handle modal submissions (solve modal)
+    if (type === InteractionType.MODAL_SUBMIT) {
+      const modalId = data.custom_id; // e.g. hangman_solve_modal_<gameId>
+      if (
+        typeof modalId === "string" &&
+        modalId.startsWith("hangman_solve_modal_")
+      ) {
+        const gameId = modalId.replace("hangman_solve_modal_", "");
+        const game = activeHangmanGames[gameId];
+        // modal components structure: data.components[0].components[0].value
+        let guess = null;
+        try {
+          const comps = req.body.data?.components || [];
+          if (comps[0] && comps[0].components && comps[0].components[0]) {
+            guess = comps[0].components[0].value;
+          }
+        } catch (err) {
+          console.error("hangman modal parse error", err);
+        }
+
+        if (!game) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags: InteractionResponseFlags.EPHEMERAL,
+              content: "This hangman game no longer exists.",
+            },
+          });
+        }
+
+        if (!guess) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags: InteractionResponseFlags.EPHEMERAL,
+              content: "No guess received.",
+            },
+          });
+        }
+
+        const normalized = String(guess).trim().toLowerCase();
+        if (normalized === game.word.toLowerCase()) {
+          // correct: try to update the original message if available
+          try {
+            if (req.body.message && req.body.message.id) {
+              await res.send({
+                type: InteractionResponseType.UPDATE_MESSAGE,
+                data: {
+                  components: [
+                    {
+                      type: MessageComponentTypes.TEXT_DISPLAY,
+                      content: `🎉 <@${
+                        req.body.member?.user?.id ?? req.body.user?.id
+                      }> solved the word! **${game.word}** (wrong: ${
+                        game.wrong
+                      }/${game.maxWrong}${
+                        game.wrongLetters.length
+                          ? " — wrong letters/guesses: " +
+                            game.wrongLetters.join(", ")
+                          : ""
+                      })`,
+                    },
+                  ],
+                },
+              });
+            } else {
+              // fallback: post a public message
+              await res.send({
+                type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+                data: {
+                  content: `🎉 <@${
+                    req.body.member?.user?.id ?? req.body.user?.id
+                  }> solved the hangman: **${game.word}**`,
+                },
+              });
+            }
+          } catch (err) {
+            console.error("hangman modal update error", err);
+          }
+          delete activeHangmanGames[gameId];
+        } else {
+          // incorrect: record as a wrong guess and reply ephemerally
+          game.wrong++;
+          game.wrongLetters.push(guess.toUpperCase());
+          try {
+            await res.send({
+              type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+              data: {
+                flags: InteractionResponseFlags.EPHEMERAL,
+                content: `Incorrect solve attempt: **${guess}** — (${game.wrong}/${game.maxWrong} wrong)`,
+              },
+            });
+          } catch (err) {
+            console.error("hangman modal incorrect reply error", err);
+          }
+
+          // if too many wrongs, end the game and update original message if possible
+          if (game.wrong >= game.maxWrong) {
+            try {
+              if (req.body.message && req.body.message.id) {
+                await res.send({
+                  type: InteractionResponseType.UPDATE_MESSAGE,
+                  data: {
+                    components: [
+                      {
+                        type: MessageComponentTypes.TEXT_DISPLAY,
+                        content: `☠️ Game over — the word was **${
+                          game.word
+                        }** (wrong: ${game.wrong}/${
+                          game.maxWrong
+                        } — wrong letters/guesses: ${game.wrongLetters.join(
+                          ", "
+                        )})`,
+                      },
+                    ],
+                  },
+                });
+              } else {
+                await res.send({
+                  type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+                  data: {
+                    content: `☠️ Game over — the word was **${game.word}**`,
+                  },
+                });
+              }
+            } catch (err) {
+              console.error("hangman modal endgame update error", err);
+            }
+            delete activeHangmanGames[gameId];
+          }
+        }
+
+        return;
+      }
+    }
+
     if (type === InteractionType.MESSAGE_COMPONENT) {
       // custom_id set in payload when sending message component
       const componentId = data.custom_id;
@@ -246,7 +489,9 @@ app.post(
         // get the associated game ID
         const gameId = componentId.replace("accept_button_", "");
         // Delete message with token in request body
-        const endpoint = `webhooks/${process.env.APP_ID}/${req.body.token}/messages/${req.body.message.id}`;
+        const endpoint = `webhooks/${
+          req.body.application_id ?? process.env.APP_ID
+        }/${req.body.token}/messages/${req.body.message.id}`;
 
         // Who clicked "Accept"
         const actorId = req.body.member?.user?.id ?? req.body.user?.id;
@@ -393,7 +638,9 @@ app.post(
           // Remove game from storage
           delete activeGames[gameId];
           // Update message with token in request body
-          const endpoint = `webhooks/${process.env.APP_ID}/${req.body.token}/messages/${req.body.message.id}`;
+          const endpoint = `webhooks/${
+            req.body.application_id ?? process.env.APP_ID
+          }/${req.body.token}/messages/${req.body.message.id}`;
 
           const cRec = winLoss[challengerId];
           const oRec = winLoss[opponentId];
@@ -433,6 +680,211 @@ app.post(
             console.error("Error sending message:", err);
           }
         }
+      }
+
+      // Solve button click handling — open a modal for the user to input full-word guess
+      else if (componentId.startsWith("hangman_solve_")) {
+        const gameId = componentId.replace("hangman_solve_", "");
+        // Respond with a modal containing a single text input
+        try {
+          await res.send({
+            type: InteractionResponseType.MODAL,
+            data: {
+              custom_id: `hangman_solve_modal_${gameId}`,
+              title: "Solve Hangman",
+              components: [
+                {
+                  type: 1,
+                  components: [
+                    {
+                      type: 4,
+                      custom_id: "solve_input",
+                      style: 1,
+                      label: "Enter full word",
+                      required: true,
+                      min_length: 1,
+                    },
+                  ],
+                },
+              ],
+            },
+          });
+        } catch (err) {
+          console.error("hangman solve modal error", err);
+        }
+        return;
+      }
+
+      // hangman guesses (two select components per game)
+      else if (componentId.startsWith("hangman_guess_")) {
+        // extract game id (componentId format: "hangman_guess_<gameId>_1")
+        const rest = componentId.substring("hangman_guess_".length);
+        const gameId = rest.replace(/_\d+$/, "");
+
+        const game = activeHangmanGames[gameId];
+        if (!game) {
+          try {
+            await res.send({
+              type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+              data: {
+                flags: InteractionResponseFlags.EPHEMERAL,
+                content: "This hangman game no longer exists.",
+              },
+            });
+          } catch (err) {
+            console.error("hangman: failed to reply to missing game", err);
+          }
+          return;
+        }
+
+        const letter = data.values[0].toLowerCase();
+        if (game.guessed.includes(letter)) {
+          await res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags: InteractionResponseFlags.EPHEMERAL,
+              content: `You've already guessed **${letter.toUpperCase()}**`,
+            },
+          });
+          return;
+        }
+
+        game.guessed.push(letter);
+        if (!game.word.includes(letter)) {
+          // record wrong letter
+          game.wrongLetters.push(letter.toUpperCase());
+          game.wrong++;
+        }
+
+        const masked = maskWord(game.word, game.guessed);
+
+        try {
+          if (!masked.includes("_")) {
+            // win — update the original message
+            await res.send({
+              type: InteractionResponseType.UPDATE_MESSAGE,
+              data: {
+                components: [
+                  {
+                    type: MessageComponentTypes.TEXT_DISPLAY,
+                    content: `🎉 <@${
+                      req.body.member?.user?.id ?? req.body.user?.id
+                    }> solved the word! **${game.word}** (wrong: ${
+                      game.wrong
+                    }/${game.maxWrong}${
+                      game.wrongLetters.length
+                        ? " — wrong letters/guesses: " +
+                          game.wrongLetters.join(", ")
+                        : ""
+                    })`,
+                  },
+                ],
+              },
+            });
+            delete activeHangmanGames[gameId];
+            return;
+          }
+
+          if (game.wrong >= game.maxWrong) {
+            // lost — update the original message
+            await res.send({
+              type: InteractionResponseType.UPDATE_MESSAGE,
+              data: {
+                components: [
+                  {
+                    type: MessageComponentTypes.TEXT_DISPLAY,
+                    content: `☠️ Game over — the word was **${
+                      game.word
+                    }** (wrong: ${game.wrong}/${game.maxWrong}${
+                      game.wrongLetters.length
+                        ? " — wrong letters/guesses: " +
+                          game.wrongLetters.join(", ")
+                        : ""
+                    })`,
+                  },
+                ],
+              },
+            });
+            delete activeHangmanGames[gameId];
+            return;
+          }
+
+          // update the public message with new mask and wrong count
+          // keep the select components so players can continue guessing
+          const letters = "abcdefghijklmnopqrstuvwxyz".split("");
+          const guessedSet = new Set(game.guessed);
+          const first = letters
+            .slice(0, 13)
+            .filter((ch) => !guessedSet.has(ch))
+            .map((ch) => ({ label: ch.toUpperCase(), value: ch }));
+          const second = letters
+            .slice(13)
+            .filter((ch) => !guessedSet.has(ch))
+            .map((ch) => ({ label: ch.toUpperCase(), value: ch }));
+
+          await res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+            data: {
+              components: [
+                {
+                  type: MessageComponentTypes.TEXT_DISPLAY,
+                  content: `Hangman — Word: \`${masked}\`  (wrong: ${
+                    game.wrong
+                  }/${game.maxWrong}${
+                    game.wrongLetters.length
+                      ? " — wrong letters/guesses: " +
+                        game.wrongLetters.join(", ")
+                      : ""
+                  })`,
+                },
+                ...(first.length
+                  ? [
+                      {
+                        type: MessageComponentTypes.ACTION_ROW,
+                        components: [
+                          {
+                            type: MessageComponentTypes.STRING_SELECT,
+                            custom_id: `hangman_guess_${gameId}_1`,
+                            placeholder: "Guess a letter (A-M)",
+                            options: first,
+                          },
+                        ],
+                      },
+                    ]
+                  : []),
+                ...(second.length
+                  ? [
+                      {
+                        type: MessageComponentTypes.ACTION_ROW,
+                        components: [
+                          {
+                            type: MessageComponentTypes.STRING_SELECT,
+                            custom_id: `hangman_guess_${gameId}_2`,
+                            placeholder: "Guess a letter (N-Z)",
+                            options: second,
+                          },
+                        ],
+                      },
+                    ]
+                  : []),
+                {
+                  type: MessageComponentTypes.ACTION_ROW,
+                  components: [
+                    {
+                      type: MessageComponentTypes.BUTTON,
+                      custom_id: `hangman_solve_${gameId}`,
+                      label: "Solve",
+                      style: ButtonStyleTypes.SECONDARY,
+                    },
+                  ],
+                },
+              ],
+            },
+          });
+        } catch (err) {
+          console.error("hangman guess handling error", err);
+        }
+        return;
       }
 
       return;
