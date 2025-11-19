@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { process } from "node:process";
+import process from "node:process";
 
 export async function DiscordRequest(endpoint, options) {
   // append endpoint to root API URL
