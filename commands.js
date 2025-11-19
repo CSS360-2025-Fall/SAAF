@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { getRPSChoices } from "./game.js";
 import { capitalize, InstallGlobalCommands } from "./utils.js";
-import { process } from "node:process";
+import process from "node:process";
 
 // Get the game choices from game.js
 function createCommandChoices() {
@@ -65,6 +65,24 @@ const JOKE_COMMAND = {
 };
 // --- END OF ADDED CODE ---
 
+const HANGMAN_COMMAND = {
+  name: "hangman",
+  description: "Play hangman with a group of people.",
+  options: [
+    {
+      type: 4, // INTEGER
+      name: "number",
+      description: "The letter count you want to guess (min 5, max 14).",
+      required: false,
+      min_value: 5,
+      max_value: 14,
+    },
+  ],
+  type: 1,
+  integration_types: [0, 1], // Can be used in guilds and DMs
+  contexts: [0, 1, 2], // Can be used in guilds, DMs, and other contexts
+};
+
 const RULES_COMMAND = {
   name: "rules",
   description: "Show the bot theme, rules, and example commands",
@@ -78,5 +96,6 @@ export const ALL_COMMANDS = [
   CHALLENGE_COMMAND,
   JOKE_COMMAND,
   RULES_COMMAND,
+  HANGMAN_COMMAND,
 ];
 InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
