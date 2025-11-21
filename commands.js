@@ -1,7 +1,6 @@
 import "dotenv/config";
 import { getRPSChoices } from "./game.js";
 import { capitalize, InstallGlobalCommands } from "./utils.js";
-import process from "node:process";
 
 // Get the game choices from game.js
 function createCommandChoices() {
@@ -18,7 +17,7 @@ function createCommandChoices() {
   return commandChoices;
 }
 
-// Simple test command (Syntax corrected)
+// Simple test command
 const TEST_COMMAND = {
   name: "test",
   description: "Basic command",
@@ -27,7 +26,7 @@ const TEST_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-// Command containing options (Syntax corrected)
+// Challenge command (rock paper scissors)
 const CHALLENGE_COMMAND = {
   name: "challenge",
   description: "Challenge to a match of rock paper scissors",
@@ -45,13 +44,13 @@ const CHALLENGE_COMMAND = {
   contexts: [0, 2],
 };
 
-// --- JOKE COMMAND DEFINITION ADDED HERE ---
+// Joke command
 const JOKE_COMMAND = {
   name: "joke",
   description: "Sends a random joke or a specific one.",
   options: [
     {
-      type: 4, // INTEGER
+      type: 4,
       name: "number",
       description: "The number of the joke you want (1-3)",
       required: false,
@@ -60,29 +59,20 @@ const JOKE_COMMAND = {
     },
   ],
   type: 1,
-  integration_types: [0, 1], // Can be used in guilds and DMs
-  contexts: [0, 1, 2], // Can be used in guilds, DMs, and other contexts
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
 };
-// --- END OF ADDED CODE ---
 
-const HANGMAN_COMMAND = {
-  name: "hangman",
-  description: "Play hangman with a group of people.",
-  options: [
-    {
-      type: 4, // INTEGER
-      name: "number",
-      description: "The letter count you want to guess (min 5, max 14).",
-      required: false,
-      min_value: 5,
-      max_value: 14,
-    },
-  ],
+// Coin flip
+const COINFLIP_COMMAND = {
+  name: "coinflip",
+  description: "Flip a coin and get heads or tails!",
   type: 1,
-  integration_types: [0, 1], // Can be used in guilds and DMs
-  contexts: [0, 1, 2], // Can be used in guilds, DMs, and other contexts
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
 };
 
+// Rules
 const RULES_COMMAND = {
   name: "rules",
   description: "Show the bot theme, rules, and example commands",
@@ -122,6 +112,10 @@ const ZODIAC_COMMAND = {
       max_value: 31,
     },
   ],
+  // NEW: Guess the Song from Emojis
+const GUESS_SONG_COMMAND = {
+  name: "guesssong",
+  description: "Play guess the song from emojis!",
   type: 1,
   integration_types: [0, 1],
   contexts: [0, 1, 2],
@@ -132,8 +126,11 @@ export const ALL_COMMANDS = [
   CHALLENGE_COMMAND,
   JOKE_COMMAND,
   RULES_COMMAND,
+  COINFLIP_COMMAND,
+  GUESS_SONG_COMMAND
   HANGMAN_COMMAND,
   HIGHER_LOWER_COMMAND,
   ZODIAC_COMMAND,
 ];
+
 InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
