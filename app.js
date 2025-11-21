@@ -9,7 +9,15 @@ import {
   verifyKeyMiddleware,
 } from "discord-interactions";
 import { getRandomEmoji, DiscordRequest } from "./utils.js";
-import { getShuffledOptions, getResult } from "./game.js";
+// UPDATED IMPORT
+import {
+  getShuffledOptions,
+  getResult,
+  createDeck,
+  shuffleDeck,
+  getCardInfo,
+  getZodiacSign,
+} from "./game.js";
 import { incrementCommandUsage } from "./db/commandUsage.js";
 import { ALL_COMMANDS } from "./commands.js";
 import {
@@ -28,6 +36,8 @@ const PORT = process.env.PORT || 3000;
 const activeGames = {};
 // Hangman games stored separately
 const activeHangmanGames = {};
+// Higher Lower games
+const activeHigherLowerGames = {};
 
 // -------------------------
 // Bot theme and rules
@@ -344,6 +354,108 @@ app.post(
         });
       }
       // --- END OF ADDED JOKE LOGIC ---
+
+      // --- HIGHER/LOWER COMMAND LOGIC ---
+      if (name === "higherlower") {
+        const hiloCommand = ALL_COMMANDS.find(
+          (cmd) => cmd.name === "higherlower"
+        );
+        if (hiloCommand) incrementCommandUsage(userId, hiloCommand);
+
+        const deck = shuffleDeck(createDeck());
+        const currentCard = deck.pop();
+        const nextCard = deck.pop();
+
+        activeHigherLowerGames[userId] = {
+          deck,
+          currentCard,
+          nextCard,
+          streak: 0,
+        };
+
+        const cardInfo = getCardInfo(currentCard);
+
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: `**Higher or Lower Game Started!**\n\nYour card is: **${cardInfo.name}**\nStreak: 0\nCards left in deck: ${deck.length}\n\nGuess if the next card will be...`,
+            components: [
+              {
+                type: MessageComponentTypes.ACTION_ROW,
+                components: [
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: "hilo_higher",
+                    label: "Higher",
+                    style: ButtonStyleTypes.PRIMARY,
+                  },
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: "hilo_lower",
+                    label: "Lower",
+                    style: ButtonStyleTypes.PRIMARY,
+                  },
+                ],
+              },
+              {
+                type: MessageComponentTypes.ACTION_ROW,
+                components: [
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: "hilo_red",
+                    label: "Red",
+                    style: ButtonStyleTypes.DANGER,
+                  },
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: "hilo_black",
+                    label: "Black",
+                    style: ButtonStyleTypes.SECONDARY,
+                  },
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: "hilo_end",
+                    label: "End Game",
+                    style: ButtonStyleTypes.SECONDARY,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+      }
+      // --- END OF HIGHER/LOWER LOGIC ---
+
+      // --- ZODIAC COMMAND LOGIC ---
+      if (name === "zodiac") {
+        const zodiacCommand = ALL_COMMANDS.find((cmd) => cmd.name === "zodiac");
+        if (zodiacCommand) incrementCommandUsage(userId, zodiacCommand);
+
+        const monthOption = options.find((opt) => opt.name === "month");
+        const dayOption = options.find((opt) => opt.name === "day");
+
+        const month = monthOption ? monthOption.value : 0;
+        const day = dayOption ? dayOption.value : 0;
+
+        const signData = getZodiacSign(month, day);
+
+        if (!signData) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              content: `Invalid date provided (${month}/${day}). Please try again.`,
+            },
+          });
+        }
+
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: `🌌 **Astrology Fact** 🌌\n\n**Sign:** ${signData.sign}\n**Date:** ${month}/${day}\n\n✨ *${signData.fact}*`,
+          },
+        });
+      }
+      // --- END ZODIAC LOGIC ---
 
       console.error(`unknown command: ${name}`);
       return res.status(400).json({ error: "unknown command" });
@@ -890,6 +1002,109 @@ app.post(
         }
         return;
       }
+
+      // --- HIGHER/LOWER BUTTON LOGIC ---
+      else if (componentId.startsWith("hilo_")) {
+        const userId = req.body.member?.user?.id ?? req.body.user?.id;
+        const game = activeHigherLowerGames[userId];
+
+        // Check if game exists for this user
+        if (!game) {
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+            data: {
+              content:
+                "This game has expired or was not found. Please start a new one with `/higherlower`.",
+              components: [], // Remove buttons
+            },
+          });
+        }
+
+        const guess = componentId.replace("hilo_", "");
+
+        // Handle user ending the game
+        if (guess === "end") {
+          const finalStreak = game.streak;
+          delete activeHigherLowerGames[userId]; // Clean up game state
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE, // Update the original message
+            data: {
+              content: `Game ended. Your final streak was: **${finalStreak}**!`,
+              components: [], // Remove buttons
+            },
+          });
+        }
+
+        // --- Process the user's guess ---
+        const currentInfo = getCardInfo(game.currentCard);
+        const nextInfo = getCardInfo(game.nextCard);
+
+        let correct = false;
+
+        // Check the guess
+        if (guess === "higher") {
+          correct = nextInfo.value > currentInfo.value;
+        } else if (guess === "lower") {
+          correct = nextInfo.value < currentInfo.value;
+        } else if (guess === "red") {
+          correct = nextInfo.color === "Red";
+        } else if (guess === "black") {
+          correct = nextInfo.color === "Black";
+        }
+
+        // --- Handle Correct Guess ---
+        if (correct) {
+          game.streak++; // Increase streak
+
+          // Check for win condition (deck empty)
+          if (game.deck.length === 0) {
+            const finalStreak = game.streak;
+            delete activeHigherLowerGames[userId]; // Clean up
+            return res.send({
+              type: InteractionResponseType.UPDATE_MESSAGE,
+              data: {
+                content: `You guessed **${guess}**... The card was **${nextInfo.name}**. **You were right!**\n\n...and you finished the whole deck! 🏆\n**FINAL STREAK: ${finalStreak}**`,
+                components: [],
+              },
+            });
+          }
+
+          // Continue game: move next card to current, draw a new next card
+          game.currentCard = game.nextCard;
+          game.nextCard = game.deck.pop();
+          activeHigherLowerGames[userId] = game; // Update the game state
+
+          const newCurrentInfo = getCardInfo(game.currentCard);
+
+          // Respond with updated message and re-send the same buttons
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+            data: {
+              content: `You guessed **${guess}**... The card was **${
+                nextInfo.name
+              }**. **You were right!** ${getRandomEmoji()}\n\nYour new card is: **${
+                newCurrentInfo.name
+              }**\nStreak: ${game.streak}\nCards left in deck: ${
+                game.deck.length
+              }\n\nGuess if the next card will be...`,
+              components: req.body.message.components, // Re-send the original buttons
+            },
+          });
+        } else {
+          // --- Handle Incorrect Guess ---
+          const finalStreak = game.streak;
+          delete activeHigherLowerGames[userId]; // Clean up game
+
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+            data: {
+              content: `You guessed **${guess}**... The card was **${nextInfo.name}**. **You were wrong!** 😥\n\nGame over. Your final streak was: **${finalStreak}**.`,
+              components: [], // Remove buttons
+            },
+          });
+        }
+      }
+      // --- END OF HILO BUTTON LOGIC ---
 
       return;
     }
