@@ -9,7 +9,8 @@ import {
   verifyKeyMiddleware,
 } from "discord-interactions";
 import { getRandomEmoji, DiscordRequest } from "./utils.js";
-import { getShuffledOptions, getResult } from "./game.js";
+// Updated import to include new game functions
+import { getShuffledOptions, getResult, createDeck, shuffleDeck, getCardInfo } from "./game.js";
 import { incrementCommandUsage } from "./db/commandUsage.js";
 import { ALL_COMMANDS } from "./commands.js";
 
@@ -20,6 +21,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 // To keep track of our active games
 const activeGames = {};
+// Added state for higher/lower games
+const activeHigherLowerGames = {};
 
 // -------------------------
 // Bot theme and rules
@@ -187,11 +190,10 @@ app.post(
             }
           ]
         }
-      }
-    );
-  }
+      });
+      } 
 
-      // --- JOKE COMMAND LOGIC ADDED HERE ---
+      // --- JOKE COMMAND LOGIC (from your file) ---
       if (name === "joke") {
         // Find the joke command to pass to increment
         const jokeCommand = ALL_COMMANDS.find((cmd) => cmd.name === "joke");
@@ -225,12 +227,91 @@ app.post(
           },
         });
       }
-      // --- END OF ADDED JOKE LOGIC ---
+      // --- END OF JOKE LOGIC ---
+
+      // --- NEW HIGHER/LOWER COMMAND LOGIC ---
+      if (name === "higherlower") {
+        // Find the command to pass to increment
+        const hiloCommand = ALL_COMMANDS.find((cmd) => cmd.name === "higherlower");
+        if (hiloCommand) {
+          incrementCommandUsage(userId, hiloCommand);
+        }
+
+        // Create and shuffle a new deck
+        const deck = shuffleDeck(createDeck());
+        // Draw the first two cards
+        const currentCard = deck.pop();
+        const nextCard = deck.pop();
+
+        // Store the game state, keyed by user ID
+        activeHigherLowerGames[userId] = {
+          deck,
+          currentCard,
+          nextCard,
+          streak: 0
+        };
+
+        const cardInfo = getCardInfo(currentCard);
+
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: `**Higher or Lower Game Started!**\n\nYour card is: **${cardInfo.name}**\nStreak: 0\nCards left in deck: ${deck.length}\n\nGuess if the next card will be...`,
+            components: [
+              {
+                type: MessageComponentTypes.ACTION_ROW,
+                components: [
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: "hilo_higher",
+                    label: "Higher",
+                    style: ButtonStyleTypes.PRIMARY, // Blue
+                  },
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: "hilo_lower",
+                    label: "Lower",
+                    style: ButtonStyleTypes.PRIMARY, // Blue
+                  },
+                ]
+              },
+              {
+                type: MessageComponentTypes.ACTION_ROW,
+                components: [
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: "hilo_red",
+                    label: "Red",
+                    style: ButtonStyleTypes.DANGER, // Red
+                  },
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: "hilo_black",
+                    label: "Black",
+                    style: ButtonStyleTypes.SECONDARY, // Gray
+                  },
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: "hilo_end",
+                    label: "End Game",
+                    style: ButtonStyleTypes.SECONDARY, // Gray
+                  }
+                ]
+              }
+            ]
+          }
+        });
+      }
+      // --- END OF HIGHER/LOWER LOGIC ---
 
       console.error(`unknown command: ${name}`);
       return res.status(400).json({ error: "unknown command" });
-    }
+    } // <-- *** THIS IS THE CORRECT closing brace for 'if (type === InteractionType.APPLICATION_COMMAND)' ***
 
+    /**
+     * Handle message component requests
+     * See https://discord.com/developers/docs/interactions/message-components#component-object
+     */
     if (type === InteractionType.MESSAGE_COMPONENT) {
       // custom_id set in payload when sending message component
       const componentId = data.custom_id;
@@ -286,7 +367,7 @@ app.post(
             const recordsLine =
               `\n\n**Records**\n` +
               `• <@${challengerId}> — ${cRec.wins}-${cRec.losses}-${cRec.ties}\n` +
-              `• ${COMPUTER_NAME} — ${bRec.wins}-${bRec.losses}-${bRec.ties}`;
+              `• ${COMPUTER_NAME} — ${bRec.wins}-${bRec.losses}-${cRec.ties}`;
 
             // send the public result
             await res.send({
@@ -428,10 +509,106 @@ app.post(
             console.error("Error sending message:", err);
           }
         }
+      } 
+      // --- NEW HIGHER/LOWER BUTTON LOGIC ---
+      else if (componentId.startsWith("hilo_")) {
+        const userId = req.body.member?.user?.id ?? req.body.user?.id;
+        const game = activeHigherLowerGames[userId];
+
+        // Check if game exists for this user
+        if (!game) {
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+            data: {
+              content: "This game has expired or was not found. Please start a new one with `/higherlower`.",
+              components: [] // Remove buttons
+            }
+          });
+        }
+
+        const guess = componentId.replace("hilo_", "");
+
+        // Handle user ending the game
+        if (guess === "end") {
+          const finalStreak = game.streak;
+          delete activeHigherLowerGames[userId]; // Clean up game state
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE, // Update the original message
+            data: {
+              content: `Game ended. Your final streak was: **${finalStreak}**!`,
+              components: [] // Remove buttons
+            }
+          });
+        }
+
+        // --- Process the user's guess ---
+        const currentInfo = getCardInfo(game.currentCard);
+        const nextInfo = getCardInfo(game.nextCard);
+
+        let correct = false;
+
+        // Check the guess
+        if (guess === "higher") {
+          correct = nextInfo.value > currentInfo.value;
+        } else if (guess === "lower") {
+          correct = nextInfo.value < currentInfo.value;
+        } else if (guess === "red") {
+          correct = nextInfo.color === "Red";
+        } else if (guess === "black") {
+          correct = nextInfo.color === "Black";
+        }
+
+        // --- Handle Correct Guess ---
+        if (correct) {
+          game.streak++; // Increase streak
+          
+          // Check for win condition (deck empty)
+          if (game.deck.length === 0) {
+            const finalStreak = game.streak;
+            delete activeHigherLowerGames[userId]; // Clean up
+            return res.send({
+              type: InteractionResponseType.UPDATE_MESSAGE,
+              data: {
+                content: `You guessed **${guess}**... The card was **${nextInfo.name}**. **You were right!**\n\n...and you finished the whole deck! 🏆\n**FINAL STREAK: ${finalStreak}**`,
+                components: []
+              }
+            });
+          }
+
+          // Continue game: move next card to current, draw a new next card
+          game.currentCard = game.nextCard;
+          game.nextCard = game.deck.pop();
+          activeHigherLowerGames[userId] = game; // Update the game state
+
+          const newCurrentInfo = getCardInfo(game.currentCard);
+
+          // Respond with updated message and re-send the same buttons
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+            data: {
+              content: `You guessed **${guess}**... The card was **${nextInfo.name}**. **You were right!** ${getRandomEmoji()}\n\nYour new card is: **${newCurrentInfo.name}**\nStreak: ${game.streak}\nCards left in deck: ${game.deck.length}\n\nGuess if the next card will be...`,
+              components: req.body.message.components // Re-send the original buttons
+            }
+          });
+
+        } else {
+          // --- Handle Incorrect Guess ---
+          const finalStreak = game.streak;
+          delete activeHigherLowerGames[userId]; // Clean up game
+
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+            data: {
+              content: `You guessed **${guess}**... The card was **${nextInfo.name}**. **You were wrong!** 😥\n\nGame over. Your final streak was: **${finalStreak}**.`,
+              components: [] // Remove buttons
+            }
+          });
+        }
       }
+      // --- END OF HILO BUTTON LOGIC ---
 
       return;
-    }
+    } // <-- Closing brace for 'if (type === InteractionType.MESSAGE_COMPONENT)'
 
     console.error("unknown interaction type", type);
     return res.status(400).json({ error: "unknown interaction type" });

@@ -101,3 +101,64 @@ export function getShuffledOptions() {
 
   return options.sort(() => Math.random() - 0.5);
 }
+
+// --- NEW HIGHER / LOWER GAME LOGIC ---
+
+const SUITS = ["Hearts", "Diamonds", "Clubs", "Spades"];
+const RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King", "Ace"];
+
+// Map ranks to their numerical values for comparison
+const RANK_VALUES = {
+  "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10,
+  "Jack": 11, "Queen": 12, "King": 13, "Ace": 14
+};
+
+// Map suits to their colors
+const SUIT_COLORS = {
+  "Hearts": "Red", "Diamonds": "Red", "Clubs": "Black", "Spades": "Black"
+};
+
+// Map suits to emojis for a nicer display
+const SUIT_EMOJIS = {
+  "Hearts": "♥️", "Diamonds": "♦️", "Clubs": "♣️", "Spades": "♠️"
+};
+
+/**
+ * Creates a standard 52-card deck
+ */
+export function createDeck() {
+  const deck = [];
+  for (const suit of SUITS) {
+    for (const rank of RANKS) {
+      deck.push({ rank, suit });
+    }
+  }
+  return deck;
+}
+
+/**
+ * Shuffles a deck using Fisher-Yates algorithm
+ * @param {Array} deck - The deck to shuffle
+ */
+export function shuffleDeck(deck) {
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+}
+
+/**
+ * Gets the value, color, and display name of a card
+ * @param {Object} card - The card object (e.g., { rank: "Ace", suit: "Spades" })
+ */
+export function getCardInfo(card) {
+  if (!card) return null;
+  return {
+    value: RANK_VALUES[card.rank],
+    color: SUIT_COLORS[card.suit],
+    name: `${card.rank} of ${card.suit} ${SUIT_EMOJIS[card.suit]}`
+  };
+}
+
+// --- END OF ADDED CODE ---

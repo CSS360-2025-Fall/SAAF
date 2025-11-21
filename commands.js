@@ -64,6 +64,7 @@ const JOKE_COMMAND = {
 };
 // --- END OF ADDED CODE ---
 
+// --- RULES COMMAND (was missing from your file) ---
 const RULES_COMMAND = {
     name: 'rules',
     description: 'Show the bot theme, rules, and example commands',
@@ -72,5 +73,20 @@ const RULES_COMMAND = {
     contexts: [0, 1, 2],
 };
 
-export const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, JOKE_COMMAND, RULES_COMMAND];
+// --- NEW HIGHER/LOWER COMMAND DEFINITION ---
+const HIGHER_LOWER_COMMAND = {
+  name: "higherlower",
+  description: "Play a game of Higher or Lower!",
+  type: 1,
+  integration_types: [0, 1], // Can be used in guilds and DMs
+  contexts: [0, 1, 2],       // Can be used in guilds, DMs, and other contexts
+};
+// --- END OF ADDED CODE ---
+
+
+// *** THIS IS THE CRITICAL FIX ***
+// Updated list to include all 5 commands
+export const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, JOKE_COMMAND, RULES_COMMAND, HIGHER_LOWER_COMMAND];
+
+// This line registers all commands when the bot starts
 InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
