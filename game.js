@@ -1,9 +1,9 @@
 import { capitalize } from "./utils.js";
 
+// --- ROCK PAPER SCISSORS LOGIC ---
 export function getResult(p1, p2) {
   let gameResult;
   if (RPSChoices[p1.objectName] && RPSChoices[p1.objectName][p2.objectName]) {
-    // o1 wins
     gameResult = {
       win: p1,
       lose: p2,
@@ -13,17 +13,14 @@ export function getResult(p1, p2) {
     RPSChoices[p2.objectName] &&
     RPSChoices[p2.objectName][p1.objectName]
   ) {
-    // o2 wins
     gameResult = {
       win: p2,
       lose: p1,
       verb: RPSChoices[p2.objectName][p1.objectName],
     };
   } else {
-    // tie -- win/lose don't
     gameResult = { win: p1, lose: p2, verb: "tie" };
   }
-
   return formatResult(gameResult);
 }
 
@@ -34,7 +31,6 @@ function formatResult(result) {
     : `<@${win.id}>'s **${win.objectName}** ${verb} <@${lose.id}>'s **${lose.objectName}**`;
 }
 
-// this is just to figure out winner + verb
 const RPSChoices = {
   rock: {
     description: "sedimentary, igneous, or perhaps even metamorphic",
@@ -84,26 +80,20 @@ export function getRPSChoices() {
   return Object.keys(RPSChoices);
 }
 
-// Function to fetch shuffled options for select menu
 export function getShuffledOptions() {
   const allChoices = getRPSChoices();
   const options = [];
-
   for (let c of allChoices) {
-    // Formatted for select menus
-    // https://discord.com/developers/docs/components/reference#string-select-select-option-structure
     options.push({
       label: capitalize(c),
       value: c.toLowerCase(),
       description: RPSChoices[c]["description"],
     });
   }
-
   return options.sort(() => Math.random() - 0.5);
 }
 
-// --- NEW HIGHER / LOWER GAME LOGIC ---
-
+// --- HIGHER / LOWER GAME LOGIC ---
 const SUITS = ["Hearts", "Diamonds", "Clubs", "Spades"];
 const RANKS = [
   "2",
@@ -120,8 +110,6 @@ const RANKS = [
   "King",
   "Ace",
 ];
-
-// Map ranks to their numerical values for comparison
 const RANK_VALUES = {
   2: 2,
   3: 3,
@@ -137,16 +125,12 @@ const RANK_VALUES = {
   King: 13,
   Ace: 14,
 };
-
-// Map suits to their colors
 const SUIT_COLORS = {
   Hearts: "Red",
   Diamonds: "Red",
   Clubs: "Black",
   Spades: "Black",
 };
-
-// Map suits to emojis for a nicer display
 const SUIT_EMOJIS = {
   Hearts: "♥️",
   Diamonds: "♦️",
@@ -181,8 +165,7 @@ export function getCardInfo(card) {
   };
 }
 
-// --- NEW ZODIAC LOGIC ---
-
+// --- ZODIAC LOGIC ---
 const ZODIAC_DATA = [
   {
     sign: "Capricorn",
@@ -281,4 +264,35 @@ export function getZodiacSign(month, day) {
       return z;
   }
   return null;
+}
+
+// --- HANGMAN LOGIC ---
+const words = [
+  "javascript",
+  "discord",
+  "programming",
+  "developer",
+  "computer",
+  "internet",
+  "database",
+  "algorithm",
+  "variable",
+  "function",
+];
+
+export function pickRandomWord() {
+  return words[Math.floor(Math.random() * words.length)];
+}
+
+export function pickWordByLength(length) {
+  const filtered = words.filter((w) => w.length === length);
+  if (filtered.length === 0) return null;
+  return filtered[Math.floor(Math.random() * filtered.length)];
+}
+
+export function maskWord(word, guessedLetters) {
+  return word
+    .split("")
+    .map((char) => (guessedLetters.includes(char) ? char : "_"))
+    .join(" ");
 }
