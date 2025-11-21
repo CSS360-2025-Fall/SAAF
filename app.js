@@ -9,7 +9,15 @@ import {
   verifyKeyMiddleware,
 } from "discord-interactions";
 import { getRandomEmoji, DiscordRequest } from "./utils.js";
-import { getShuffledOptions, getResult } from "./game.js";
+// UPDATED IMPORT
+import {
+  getShuffledOptions,
+  getResult,
+  createDeck,
+  shuffleDeck,
+  getCardInfo,
+  getZodiacSign,
+} from "./game.js";
 import { incrementCommandUsage } from "./db/commandUsage.js";
 import { ALL_COMMANDS } from "./commands.js";
 
@@ -17,6 +25,10 @@ const winLoss = Object.create(null);
 const app = express();
 const PORT = process.env.PORT || 3000;
 const activeGames = {};
+// Hangman games stored separately
+const activeHangmanGames = {};
+// Higher Lower games
+const activeHigherLowerGames = {};
 
 const BOT_THEME = {
   description: "A fun Discord bot to play quick games like Rock Paper Scissors with friends!",
@@ -218,13 +230,14 @@ app.post(
         });
       }
 
-      // -----------------------------------------
+      
+
+    // -----------------------------------------
       // GUESS THE SONG COMMAND
       // -----------------------------------------
       if (name === "guesssong") {
         const songGameCommand = ALL_COMMANDS.find(cmd => cmd.name === "guesssong");
         if (songGameCommand) incrementCommandUsage(userId, songGameCommand);
-
         const song = getRandomSong();
         activeSongGames[id] = { userId, song };
 
@@ -465,6 +478,108 @@ app.post(
         });
       }
 
+      // --- HIGHER/LOWER BUTTON LOGIC ---
+      else if (componentId.startsWith("hilo_")) {
+        const userId = req.body.member?.user?.id ?? req.body.user?.id;
+        const game = activeHigherLowerGames[userId];
+
+        // Check if game exists for this user
+        if (!game) {
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+            data: {
+              content:
+                "This game has expired or was not found. Please start a new one with `/higherlower`.",
+              components: [], // Remove buttons
+            },
+          });
+        }
+
+        const guess = componentId.replace("hilo_", "");
+
+        // Handle user ending the game
+        if (guess === "end") {
+          const finalStreak = game.streak;
+          delete activeHigherLowerGames[userId]; // Clean up game state
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE, // Update the original message
+            data: {
+              content: `Game ended. Your final streak was: **${finalStreak}**!`,
+              components: [], // Remove buttons
+            },
+          });
+        }
+
+        // --- Process the user's guess ---
+        const currentInfo = getCardInfo(game.currentCard);
+        const nextInfo = getCardInfo(game.nextCard);
+
+        let correct = false;
+
+        // Check the guess
+        if (guess === "higher") {
+          correct = nextInfo.value > currentInfo.value;
+        } else if (guess === "lower") {
+          correct = nextInfo.value < currentInfo.value;
+        } else if (guess === "red") {
+          correct = nextInfo.color === "Red";
+        } else if (guess === "black") {
+          correct = nextInfo.color === "Black";
+        }
+
+        // --- Handle Correct Guess ---
+        if (correct) {
+          game.streak++; // Increase streak
+
+          // Check for win condition (deck empty)
+          if (game.deck.length === 0) {
+            const finalStreak = game.streak;
+            delete activeHigherLowerGames[userId]; // Clean up
+            return res.send({
+              type: InteractionResponseType.UPDATE_MESSAGE,
+              data: {
+                content: `You guessed **${guess}**... The card was **${nextInfo.name}**. **You were right!**\n\n...and you finished the whole deck! 🏆\n**FINAL STREAK: ${finalStreak}**`,
+                components: [],
+              },
+            });
+          }
+
+          // Continue game: move next card to current, draw a new next card
+          game.currentCard = game.nextCard;
+          game.nextCard = game.deck.pop();
+          activeHigherLowerGames[userId] = game; // Update the game state
+
+          const newCurrentInfo = getCardInfo(game.currentCard);
+
+          // Respond with updated message and re-send the same buttons
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+            data: {
+              content: `You guessed **${guess}**... The card was **${
+                nextInfo.name
+              }**. **You were right!** ${getRandomEmoji()}\n\nYour new card is: **${
+                newCurrentInfo.name
+              }**\nStreak: ${game.streak}\nCards left in deck: ${
+                game.deck.length
+              }\n\nGuess if the next card will be...`,
+              components: req.body.message.components, // Re-send the original buttons
+            },
+          });
+        } else {
+          // --- Handle Incorrect Guess ---
+          const finalStreak = game.streak;
+          delete activeHigherLowerGames[userId]; // Clean up game
+
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+            data: {
+              content: `You guessed **${guess}**... The card was **${nextInfo.name}**. **You were wrong!** 😥\n\nGame over. Your final streak was: **${finalStreak}**.`,
+              components: [], // Remove buttons
+            },
+          });
+        }
+      }
+      // --- END OF HILO BUTTON LOGIC ---
 
       return;
     }

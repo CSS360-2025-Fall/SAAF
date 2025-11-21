@@ -81,7 +81,38 @@ const RULES_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-// NEW: Guess the Song from Emojis
+// --- HIGHER/LOWER COMMAND ---
+const HIGHER_LOWER_COMMAND = {
+  name: "higherlower",
+  description: "Play a game of Higher or Lower!",
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
+// --- ZODIAC COMMAND ---
+const ZODIAC_COMMAND = {
+  name: "zodiac",
+  description: "Enter your birth month and day to get a horoscope fact.",
+  options: [
+    {
+      type: 4, // INTEGER
+      name: "month",
+      description: "Birth Month (1-12)",
+      required: true,
+      min_value: 1,
+      max_value: 12,
+    },
+    {
+      type: 4, // INTEGER
+      name: "day",
+      description: "Birth Day (1-31)",
+      required: true,
+      min_value: 1,
+      max_value: 31,
+    },
+  ],
+  // NEW: Guess the Song from Emojis
 const GUESS_SONG_COMMAND = {
   name: "guesssong",
   description: "Play guess the song from emojis!",
@@ -97,6 +128,9 @@ export const ALL_COMMANDS = [
   RULES_COMMAND,
   COINFLIP_COMMAND,
   GUESS_SONG_COMMAND
+  HANGMAN_COMMAND,
+  HIGHER_LOWER_COMMAND,
+  ZODIAC_COMMAND,
 ];
 
 InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
