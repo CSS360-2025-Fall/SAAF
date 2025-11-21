@@ -6,18 +6,15 @@ import { capitalize, InstallGlobalCommands } from "./utils.js";
 function createCommandChoices() {
   const choices = getRPSChoices();
   const commandChoices = [];
-
   for (let choice of choices) {
     commandChoices.push({
       name: capitalize(choice),
       value: choice.toLowerCase(),
     });
   }
-
   return commandChoices;
 }
 
-// Simple test command
 const TEST_COMMAND = {
   name: "test",
   description: "Basic command",
@@ -26,7 +23,6 @@ const TEST_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-// Challenge command (rock paper scissors)
 const CHALLENGE_COMMAND = {
   name: "challenge",
   description: "Challenge to a match of rock paper scissors",
@@ -44,7 +40,6 @@ const CHALLENGE_COMMAND = {
   contexts: [0, 2],
 };
 
-// Joke command
 const JOKE_COMMAND = {
   name: "joke",
   description: "Sends a random joke or a specific one.",
@@ -63,7 +58,6 @@ const JOKE_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-// Coin flip
 const COINFLIP_COMMAND = {
   name: "coinflip",
   description: "Flip a coin and get heads or tails!",
@@ -72,7 +66,6 @@ const COINFLIP_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-// Rules
 const RULES_COMMAND = {
   name: "rules",
   description: "Show the bot theme, rules, and example commands",
@@ -81,7 +74,6 @@ const RULES_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-// --- HIGHER/LOWER COMMAND ---
 const HIGHER_LOWER_COMMAND = {
   name: "higherlower",
   description: "Play a game of Higher or Lower!",
@@ -90,13 +82,30 @@ const HIGHER_LOWER_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-// --- ZODIAC COMMAND ---
+const HANGMAN_COMMAND = {
+  name: "hangman",
+  description: "Play hangman with a group of people.",
+  options: [
+    {
+      type: 4,
+      name: "number",
+      description: "The letter count you want to guess (min 5, max 14).",
+      required: false,
+      min_value: 5,
+      max_value: 14,
+    },
+  ],
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
 const ZODIAC_COMMAND = {
   name: "zodiac",
   description: "Enter your birth month and day to get a horoscope fact.",
   options: [
     {
-      type: 4, // INTEGER
+      type: 4,
       name: "month",
       description: "Birth Month (1-12)",
       required: true,
@@ -104,7 +113,7 @@ const ZODIAC_COMMAND = {
       max_value: 12,
     },
     {
-      type: 4, // INTEGER
+      type: 4,
       name: "day",
       description: "Birth Day (1-31)",
       required: true,
@@ -112,7 +121,11 @@ const ZODIAC_COMMAND = {
       max_value: 31,
     },
   ],
-  // NEW: Guess the Song from Emojis
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
 const GUESS_SONG_COMMAND = {
   name: "guesssong",
   description: "Play guess the song from emojis!",
@@ -127,7 +140,7 @@ export const ALL_COMMANDS = [
   JOKE_COMMAND,
   RULES_COMMAND,
   COINFLIP_COMMAND,
-  GUESS_SONG_COMMAND
+  GUESS_SONG_COMMAND,
   HANGMAN_COMMAND,
   HIGHER_LOWER_COMMAND,
   ZODIAC_COMMAND,
