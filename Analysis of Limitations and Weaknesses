@@ -1,0 +1,56 @@
+- Hard-coded game rules: A lot of the game values and responses are written directly into the command files. If we ever want to change the
+  rules or add new games, we’d have to manually edit multiple parts of the code instead of adjusting them in one place.
+
+- Lack of modular code: Each game’s logic is kind of tied into the main bot commands instead of being separated into modules. This makes it
+  harder to reuse or add new games since we’d have to rewrite or copy a lot of the same logic.
+
+- No automated testing: There aren’t any tests to check if the slash commands or game logic are working correctly. This means if we change
+  something, we might break another feature without noticing.
+
+- No logging: The bot doesn’t log errors or track how often commands are used, so it’s hard to debug problems or see what games people play
+  the most.
+
+- These issues show the kind of technical debt that builds up when a project grows quickly without structure. It connects to what we talked
+  about in class: making code maintainable and testable instead of patching fixes as we go.
+
+UI/UX and Engagement:
+
+- An analysis of the bot's UI/UX reveals a significant gap in user engagement stemming from inconsistent visual feedback. While the /rules command effectively uses a Discord Embed 
+(app.js, line 214) to present information clearly, this design pattern is critically absent from the core game loop. The results for both player-vs-computer (line 283) 
+and player-vs-player (line 381) games are delivered as dense, unformatted text within a basic TEXT_DISPLAY component. This not only creates a jarring and unprofessional user experience
+but also fails to meet the non-functional requirements of usability and engagement. The game's climax—the result—should be visually rewarding. Using embeds with colors 
+(e.g., green for a win, red for a loss), emojis, or even images for the choices would make the bot feel more polished and significantly improve player satisfaction.
+
+- Furthermore, the bot's engagement model is currently transactional rather than relational. The interaction flow terminates immediately after a single game's result is posted, 
+violating a key design principle for "sticky" applications. There are no interactive components, such as a "Play Again" button (which could re-initiate the challenge with the same 
+opponent) or a "View Leader board" button. This forces the user to re-invoke the /challenge slash command manually, adding friction and breaking the engagement loop.
+This gap represents a failure to anticipate the user's next logical action. By not providing interactive "next steps," the bot misses a crucial opportunity to retain users and
+encourage sequential, "just-one-more-game" sessions.
+the most.
+
+- Finally, a significant piece of technical debt directly undermines long-term user engagement and constitutes a functional bug. The winLoss record-keeping system (app.js, line 23) 
+is implemented as an in-memory JavaScript object. This architectural flaw means all user statistics—a primary driver for repeated play—are wiped every time the bot restarts or deploys.
+This makes the "Records" feature (lines 289, 384) misleading and ultimately useless for retention. The project already includes firebase-admin as a dependency (package.json), 
+but it is not used for persisting game state. Refactoring this to store win/loss records in a persistent database (like Firestore) is a high-priority task to fix this data-integrity bug 
+and provide a meaningful, long-term engagement hook.
+
+ESLint:
+
+- Poor data sanitization before inserting to DB (unsafe operations)
+  - There should be some sort of rate limiting on the ability to modify the database in any way. As it stands, the database is secure, but there could potentially be a spam/DOS attack 
+    that we would have no way of dealing with.
+
+- ESLint is unhappy with the complexity of our app.js file. This could cause security issues and general extensibility issues in the future.
+  - Would be best to abstract some of the command logic/command handling out to a separate file to make it more readable and extensible for everyone in the future.
+
+Security & Privacy 
+
+Our game bot works well for simple games, but it has a few security and privacy issues that could cause problems if more people start using it. Right now, the bot 
+might log information like usernames or messages, which could expose personal data if the logs aren’t handled carefully. There’s also no system to control who can 
+join private games, so anyone on the server could enter even if they weren’t invited. On top of that, the bot doesn’t have any rate limiting, which means someone 
+could spam commands like /play and slow it down or even crash it. Finally, users and admins don’t really have a way to see or control what data the bot keeps.
+Adding features like authentication for private games, cooldowns between commands, and safer logging would make the bot more secure, protect users’ privacy, and 
+overall make it feel more trustworthy to use.
+
+
+
