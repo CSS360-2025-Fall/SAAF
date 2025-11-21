@@ -17,7 +17,7 @@ function createCommandChoices() {
   return commandChoices;
 }
 
-// Simple test command (Syntax corrected)
+// Simple test command
 const TEST_COMMAND = {
   name: "test",
   description: "Basic command",
@@ -26,7 +26,7 @@ const TEST_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-// Command containing options (Syntax corrected)
+// Challenge command (rock paper scissors)
 const CHALLENGE_COMMAND = {
   name: "challenge",
   description: "Challenge to a match of rock paper scissors",
@@ -44,13 +44,13 @@ const CHALLENGE_COMMAND = {
   contexts: [0, 2],
 };
 
-// --- JOKE COMMAND DEFINITION ADDED HERE ---
+// Joke command
 const JOKE_COMMAND = {
   name: "joke",
   description: "Sends a random joke or a specific one.",
   options: [
     {
-      type: 4, // INTEGER
+      type: 4,
       name: "number",
       description: "The number of the joke you want (1-3)",
       required: false,
@@ -59,18 +59,44 @@ const JOKE_COMMAND = {
     },
   ],
   type: 1,
-  integration_types: [0, 1], // Can be used in guilds and DMs
-  contexts: [0, 1, 2], // Can be used in guilds, DMs, and other contexts
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
 };
-// --- END OF ADDED CODE ---
 
+// Coin flip
+const COINFLIP_COMMAND = {
+  name: "coinflip",
+  description: "Flip a coin and get heads or tails!",
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
+// Rules
 const RULES_COMMAND = {
-    name: 'rules',
-    description: 'Show the bot theme, rules, and example commands',
-    type: 1,
-    integration_types: [0, 1],
-    contexts: [0, 1, 2],
+  name: "rules",
+  description: "Show the bot theme, rules, and example commands",
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
 };
 
-export const ALL_COMMANDS = [TEST_COMMAND, CHALLENGE_COMMAND, JOKE_COMMAND, RULES_COMMAND];
+// NEW: Guess the Song from Emojis
+const GUESS_SONG_COMMAND = {
+  name: "guesssong",
+  description: "Play guess the song from emojis!",
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
+export const ALL_COMMANDS = [
+  TEST_COMMAND,
+  CHALLENGE_COMMAND,
+  JOKE_COMMAND,
+  RULES_COMMAND,
+  COINFLIP_COMMAND,
+  GUESS_SONG_COMMAND
+];
+
 InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
