@@ -28,6 +28,8 @@ const PORT = process.env.PORT || 3000;
 const activeGames = {};
 // Hangman games stored separately
 const activeHangmanGames = {};
+// TypeRace games
+const activeTypeRaces = {};
 
 // -------------------------
 // Bot theme and rules
@@ -127,6 +129,55 @@ app.post(
                 type: MessageComponentTypes.TEXT_DISPLAY,
                 // Fetches a random emoji to send from a helper function
                 content: `hello world ${getRandomEmoji()}`,
+              },
+            ],
+          },
+        });
+      }
+
+      // "typerace" command
+      if (name === "typerace") {
+        const gameId = id;
+        const passage = (await import('./typerace.js')).pickPassage();
+        activeTypeRaces[gameId] = {
+          passage,
+          host: userId,
+          startTime: null,
+          results: [],
+          channelId: req.body.channel_id,
+        };
+
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            flags: InteractionResponseFlags.IS_COMPONENTS_V2,
+            components: [
+              {
+                type: MessageComponentTypes.TEXT_DISPLAY,
+                content: `Type Race started by <@${userId}>\n\nPassage:\n\`${passage}\`\n\nHost must click **Begin** to start the race. Players click **Start** to open the typing modal.`,
+              },
+              {
+                type: MessageComponentTypes.ACTION_ROW,
+                components: [
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: `typerace_begin_${gameId}`,
+                    label: "Begin",
+                    style: ButtonStyleTypes.PRIMARY,
+                  },
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: `typerace_start_${gameId}`,
+                    label: "Start",
+                    style: ButtonStyleTypes.SECONDARY,
+                  },
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: `typerace_leaderboard_${gameId}`,
+                    label: "Leaderboard",
+                    style: ButtonStyleTypes.SECONDARY,
+                  },
+                ],
               },
             ],
           },
@@ -282,6 +333,41 @@ app.post(
         });
       }
 
+      // "submit" command (for TypeRace submissions without modal)
+      if (name === "submit") {
+        const textOption = options?.find((o) => o.name === "text");
+        const gameOption = options?.find((o) => o.name === "game");
+        const typed = textOption?.value;
+        const providedGame = gameOption?.value;
+        const callerId = req.body.member?.user?.id ?? req.body.user?.id;
+
+        if (!typed) {
+          return res.send({ type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL, content: 'No text provided.' } });
+        }
+
+        // find game: use provided game id or search for active race in same channel
+        let game = null;
+        if (providedGame) game = activeTypeRaces[providedGame];
+        else {
+          game = Object.values(activeTypeRaces).find((g) => g.channelId === req.body.channel_id && g.startTime);
+        }
+
+        if (!game) {
+          return res.send({ type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL, content: 'No active race found in this channel.' } });
+        }
+
+        const submitTime = Date.now();
+        const elapsed = Math.max(0, submitTime - (game.startTime || submitTime));
+        const { computeStats } = await import('./typerace.js');
+        const stats = computeStats(game.passage, typed, elapsed);
+
+        game.results.push({ userId: callerId, ...stats });
+
+        // respond to the submitter with their stats
+        const rank = game.results.slice().sort((a, b) => b.netWPM - a.netWPM).findIndex((r) => r.userId === callerId) + 1;
+        return res.send({ type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL, content: `Submission recorded — ${stats.netWPM} WPM (accuracy ${Math.round(stats.accuracy*100)}%). Current rank: ${rank}` } });
+      }
+
       if (name === "rules") {
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -352,6 +438,50 @@ app.post(
     // Handle modal submissions (solve modal)
     if (type === InteractionType.MODAL_SUBMIT) {
       const modalId = data.custom_id; // e.g. hangman_solve_modal_<gameId>
+      // Handle TypeRace modal submissions
+      if (typeof modalId === 'string' && modalId.startsWith('typerace_modal_')) {
+        // modalId format: typerace_modal_<gameId>_<userId>
+        const parts = modalId.split('_');
+        const gameId = parts[2];
+        const userId = parts.slice(3).join('_');
+        const game = activeTypeRaces[gameId];
+        if (!game) {
+          return res.send({ type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL, content: 'Race not found.' } });
+        }
+
+        // extract typed value
+        let typed = null;
+        try {
+          const comps = req.body.data?.components || [];
+          if (comps[0] && comps[0].components && comps[0].components[0]) {
+            typed = comps[0].components[0].value;
+          }
+        } catch (err) {
+          console.error('typerace modal parse error', err);
+        }
+
+        if (!typed) {
+          return res.send({ type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL, content: 'No input received.' } });
+        }
+
+        const submitTime = Date.now();
+        const elapsed = Math.max(0, submitTime - (game.startTime || submitTime));
+
+        const { computeStats } = await import('./typerace.js');
+        const stats = computeStats(game.passage, typed, elapsed);
+
+        // record result
+        game.results.push({ userId, ...stats });
+
+        // update public message leaderboard (we'll try to UPDATE_MESSAGE)
+        try {
+          const rows = game.results.slice().sort((a, b) => b.netWPM - a.netWPM).map((r, i) => `${i + 1}. <@${r.userId}> — ${r.netWPM} WPM (${Math.round(r.accuracy*100)}%)`).join('\n');
+          await res.send({ type: InteractionResponseType.UPDATE_MESSAGE, data: { components: [ { type: MessageComponentTypes.TEXT_DISPLAY, content: `Type Race — passage:\n\`${game.passage}\`\n\nLeaderboard:\n${rows}` } ] } });
+        } catch (err) {
+          console.error('typerace modal update error', err);
+        }
+        return;
+      }
       if (
         typeof modalId === "string" &&
         modalId.startsWith("hangman_solve_modal_")
@@ -684,6 +814,70 @@ app.post(
             console.error("Error sending message:", err);
           }
         }
+      }
+      // TypeRace: host begins the race
+      else if (componentId.startsWith("typerace_begin_")) {
+        const gameId = componentId.replace("typerace_begin_", "");
+        const game = activeTypeRaces[gameId];
+        if (!game) {
+          return res.send({ type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL, content: 'Race not found.' } });
+        }
+        // only host can begin
+        const clicker = req.body.member?.user?.id ?? req.body.user?.id;
+        if (clicker !== game.host) {
+          return res.send({ type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL, content: 'Only the host can begin the race.' } });
+        }
+
+        game.startTime = Date.now();
+
+        try {
+          await res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+            data: {
+              components: [
+                { type: MessageComponentTypes.TEXT_DISPLAY, content: `Race started by <@${game.host}> — passage:\n\`${game.passage}\`\nPlayers may now click Start to open the typing modal.` },
+                { type: MessageComponentTypes.ACTION_ROW, components: [ { type: MessageComponentTypes.BUTTON, custom_id: `typerace_start_${gameId}`, label: 'Start', style: ButtonStyleTypes.SECONDARY }, { type: MessageComponentTypes.BUTTON, custom_id: `typerace_leaderboard_${gameId}`, label: 'Leaderboard', style: ButtonStyleTypes.SECONDARY } ] },
+              ],
+            },
+          });
+        } catch (err) {
+          console.error('typerace begin error', err);
+        }
+        return;
+      }
+
+      // TypeRace: player clicks Start — show modal if race started
+      else if (componentId.startsWith("typerace_start_")) {
+        const gameId = componentId.replace("typerace_start_", "");
+        const game = activeTypeRaces[gameId];
+        if (!game) return res.send({ type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL, content: 'Race not found.' } });
+        if (!game.startTime) return res.send({ type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL, content: 'Race has not begun yet.' } });
+
+        // Send modal for typing
+        try {
+          await res.send({
+            type: InteractionResponseType.MODAL,
+            data: {
+              custom_id: `typerace_modal_${gameId}_${req.body.member?.user?.id ?? req.body.user?.id}`,
+              title: 'Type Race — Submit your text',
+              components: [
+                { type: 1, components: [ { type: 4, custom_id: 'typed_input', style: 2, label: 'Paste/type the passage exactly', required: true, min_length: 1 } ] },
+              ],
+            },
+          });
+        } catch (err) {
+          console.error('typerace start modal error', err);
+        }
+        return;
+      }
+
+      // TypeRace: show leaderboard (ephemeral)
+      else if (componentId.startsWith("typerace_leaderboard_")) {
+        const gameId = componentId.replace("typerace_leaderboard_", "");
+        const game = activeTypeRaces[gameId];
+        if (!game) return res.send({ type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL, content: 'Race not found.' } });
+        const rows = (game.results || []).slice().sort((a, b) => b.netWPM - a.netWPM).map((r, i) => `${i + 1}. <@${r.userId}> — ${r.netWPM} WPM (${Math.round(r.accuracy*100)}%)`).join('\n') || 'No results yet.';
+        return res.send({ type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL, content: `Leaderboard:\n${rows}` } });
       }
 
       // Solve button click handling — open a modal for the user to input full-word guess

@@ -83,6 +83,38 @@ const HANGMAN_COMMAND = {
   contexts: [0, 1, 2], // Can be used in guilds, DMs, and other contexts
 };
 
+const TYPERACE_COMMAND = {
+  name: "typerace",
+  description:
+    "Start a typing race; host begins the race and players submit their typing.",
+  options: [],
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
+const SUBMIT_COMMAND = {
+  name: "submit",
+  description: "Submit your typed passage for the active race (or provide game id).",
+  options: [
+    {
+      type: 3, // STRING
+      name: "text",
+      description: "Your typed passage (paste/type the full passage)",
+      required: true,
+    },
+    {
+      type: 3,
+      name: "game",
+      description: "Optional game id to submit to",
+      required: false,
+    },
+  ],
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
 const RULES_COMMAND = {
   name: "rules",
   description: "Show the bot theme, rules, and example commands",
@@ -97,5 +129,7 @@ export const ALL_COMMANDS = [
   JOKE_COMMAND,
   RULES_COMMAND,
   HANGMAN_COMMAND,
+  TYPERACE_COMMAND,
+  SUBMIT_COMMAND,
 ];
 InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
