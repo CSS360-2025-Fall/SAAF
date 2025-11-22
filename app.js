@@ -9,46 +9,79 @@ import {
   verifyKeyMiddleware,
 } from "discord-interactions";
 import { getRandomEmoji, DiscordRequest } from "./utils.js";
-import { getShuffledOptions, getResult } from "./game.js";
+import {
+  getShuffledOptions,
+  getResult,
+  createDeck,
+  shuffleDeck,
+  getCardInfo,
+  getZodiacSign,
+  pickWordByLength,
+  pickRandomWord,
+  maskWord,
+} from "./game.js";
 import { incrementCommandUsage } from "./db/commandUsage.js";
 import { ALL_COMMANDS } from "./commands.js";
 
 const winLoss = Object.create(null);
-// Create an express app
 const app = express();
-// Get port, or default to 3000
 const PORT = process.env.PORT || 3000;
-// To keep track of our active games
-const activeGames = {};
-const blackjackGames = {};
-const tttGames = {};
+
+// -------------------------
+// Base game states
+// -------------------------
+const activeGames = {};               // RPS challenges
+const blackjackGames = {};            // Your blackjack
+const tttGames = {};                  // Your tic tac toe
+
+// Main branch game states
+const activeHangmanGames = {};
+const activeHigherLowerGames = {};
+const activeSongGames = {};
 
 // -------------------------
 // Bot theme and rules
 // -------------------------
 const BOT_THEME = {
-  description: "A fun Discord bot to play quick games like Rock Paper Scissors with friends!",
+  description:
+    "A fun Discord bot to play quick games like Rock Paper Scissors with friends!",
   rules: [
     "Be respectful to other players.",
     "No spamming buttons or options.",
     "Only use commands in the proper channels.",
     "Have fun and enjoy random surprises 😄",
-    "The bot is meant for casual gaming; results are just for fun!"
+    "The bot is meant for casual gaming; results are just for fun!",
   ],
   exampleCommands: [
     "/test - Test the bot's response",
-    "/challenge <choice> - Start a Rock Paper Scissors game with a friend"
-  ]
+    "/challenge <choice> - Start a Rock Paper Scissors game with a friend",
+  ],
 };
 
-// --- CODE ADDED ---
-// Simple array of jokes for the /joke command
+// -------------------------
+// /joke data (both branches match)
+// -------------------------
 const jokes = [
   "Why do JavaScript developers wear glasses? Because they don't C#!",
   "What's the object-oriented way to become wealthy? Inheritance.",
   "Why did the programmer quit his job? Because he didn't get arrays.",
 ];
-// --- END OF ADDED CODE ---
+
+// -------------------------
+// Guess the Song data (main)
+// -------------------------
+const songs = [
+  { title: "Baby - Justin Bieber", emojis: "👶💕🎶" },
+  { title: "Circus - Britney Spears", emojis: "🎪🤹‍♀️✨" },
+  { title: "Thriller - Michael Jackson", emojis: "🧛‍♂️🌕🧟‍♂️" },
+  { title: "Let It Go - Idina Menzel (from Frozen)", emojis: "❄️👸🎤" },
+  { title: "Rolling in the Deep - Adele", emojis: "🌊🎵💔" },
+  { title: "Umbrella - Rihanna", emojis: "☔👑🌧️" },
+];
+
+function getRandomSong() {
+  return songs[Math.floor(Math.random() * songs.length)];
+}
 
 const COMPUTER_ID = "RPS_COMPUTER";
 const COMPUTER_NAME = "Computer";
@@ -58,6 +91,9 @@ function randomRps() {
   return opts[Math.floor(Math.random() * opts.length)];
 }
 
+// -------------------------
+// Win/Loss helpers (yours)
+// -------------------------
 function initRecord(userId) {
   if (!winLoss[userId]) winLoss[userId] = { wins: 0, losses: 0, ties: 0 };
 }
@@ -78,7 +114,7 @@ function decideOutcome(p1Choice, p2Choice) {
 }
 
 // -------------------------
-// Blackjack helpers
+// Blackjack helpers (yours)
 // -------------------------
 const BJ_SUITS = ["♠", "♥", "♦", "♣"];
 const BJ_RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
@@ -90,7 +126,6 @@ function createShuffledDeck() {
       deck.push({ rank, suit });
     }
   }
-  //shuffle
   for (let i = deck.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [deck[i], deck[j]] = [deck[j], deck[i]];
@@ -117,7 +152,6 @@ function getHandValue(hand) {
     }
   }
 
-  // Make Aces 1 instead of 11 if we bust
   while (total > 21 && aces > 0) {
     total -= 10;
     aces -= 1;
@@ -137,8 +171,10 @@ function formatHand(hand, hideFirst = false) {
   return hand.map((c) => `${c.rank}${c.suit}`).join(" ");
 }
 
-//Tic Tac Toe Helper
-function makeEmptyBoard(){
+// -------------------------
+// TicTacToe helpers (yours)
+// -------------------------
+function makeEmptyBoard() {
   return Array(9).fill(null);
 }
 
@@ -155,10 +191,7 @@ const TTT_LINES = [
 
 function checkTttWinner(board) {
   for (const line of TTT_LINES) {
-    const a = line[0];
-    const b = line[1];
-    const c = line[2];
-
+    const [a, b, c] = line;
     if (board[a] && board[a] === board[b] && board[b] === board[c]) {
       return board[a];
     }
@@ -171,30 +204,22 @@ function isBoardFull(board) {
 }
 
 function cellToSymbol(cell) {
-  if (cell === "X") {
-    return "X";
-  } else if (cell === "O") {
-    return "O";
-  } else {
-    return "▢";
-  }
+  if (cell === "X") return "X";
+  if (cell === "O") return "O";
+  return "▢";
 }
 
 function makeTttText(game) {
   const { xPlayerId, oPlayerId, board, currentTurn, winner, isDraw } = game;
 
-  // Convert each cell to emoji
   const row1 = `${cellToSymbol(board[0])} ${cellToSymbol(board[1])} ${cellToSymbol(board[2])}`;
   const row2 = `${cellToSymbol(board[3])} ${cellToSymbol(board[4])} ${cellToSymbol(board[5])}`;
   const row3 = `${cellToSymbol(board[6])} ${cellToSymbol(board[7])} ${cellToSymbol(board[8])}`;
 
   let header = `**Tic Tac Toe**\nX = <@${xPlayerId}>`;
 
-  if (oPlayerId) {
-    header += `\nO = <@${oPlayerId}>`;
-  } else {
-    header += `\nO = waiting for someone to accept...`;
-  }
+  if (oPlayerId) header += `\nO = <@${oPlayerId}>`;
+  else header += `\nO = waiting for someone to accept...`;
 
   if (winner) {
     const winnerId = winner === "X" ? xPlayerId : oPlayerId;
@@ -211,11 +236,9 @@ function makeTttText(game) {
   return `${header}\n\n${row1}\n${row2}\n${row3}`;
 }
 
-// Make the components (buttons) for the message
 function makeTttComponents(gameId, game) {
   const { board, isFinished, oPlayerId } = game;
 
-  // If nobody has accepted yet, only show Accept button
   if (!oPlayerId) {
     return [
       {
@@ -232,9 +255,7 @@ function makeTttComponents(gameId, game) {
     ];
   }
 
-  // Otherwise show the 3x3 grid
   const rows = [];
-
   for (let row = 0; row < 3; row++) {
     const startIndex = row * 3;
     rows.push({
@@ -243,23 +264,13 @@ function makeTttComponents(gameId, game) {
         const index = startIndex + offset;
         const cell = board[index];
 
-        let label;
-        if (cell === "X") {
-          label = "X";
-        } else if (cell === "O") {
-          label = "O";
-        } else {
-          label = "\u200B";
-        }
+        let label = "\u200B";
+        if (cell === "X") label = "X";
+        else if (cell === "O") label = "O";
 
-        let style;
-        if (cell === "X") {
-          style = ButtonStyleTypes.PRIMARY;
-        } else if (cell === "O") {
-          style = ButtonStyleTypes.DANGER;
-        } else {
-          style = ButtonStyleTypes.SECONDARY;
-        }
+        let style = ButtonStyleTypes.SECONDARY;
+        if (cell === "X") style = ButtonStyleTypes.PRIMARY;
+        else if (cell === "O") style = ButtonStyleTypes.DANGER;
 
         return {
           type: MessageComponentTypes.BUTTON,
@@ -274,41 +285,32 @@ function makeTttComponents(gameId, game) {
 
   return rows;
 }
-/**
- * Interactions endpoint URL where Discord will send HTTP requests
- * Parse request body and verifies incoming requests using discord-interactions package
- */
+
+// -------------------------
+// Interactions endpoint
+// -------------------------
 app.post(
   "/interactions",
   verifyKeyMiddleware(process.env.PUBLIC_KEY),
   async function (req, res) {
-    // Interaction id, type and data
     const { id, type, data } = req.body;
 
-    /**
-     * Handle verification requests
-     */
     if (type === InteractionType.PING) {
       return res.send({ type: InteractionResponseType.PONG });
     }
 
-    /**
-     * Handle slash command requests
-     * See https://discord.com/developers/docs/interactions/application-commands#slash-commands
-     */
+    // -----------------------------------------
+    // SLASH COMMANDS
+    // -----------------------------------------
     if (type === InteractionType.APPLICATION_COMMAND) {
-      const { name, options } = data; // 'options' is needed for joke command
-      // Interaction context
+      const { name, options } = data;
       const context = req.body.context;
-      // User ID is in user field for (G)DMs, and member for servers
-      const userId = context === 0 ? req.body.member.user.id : req.body.user.id;
+      const userId =
+        context === 0 ? req.body.member?.user?.id : req.body.user?.id;
 
-      // "test" command
+      // TEST
       if (name === "test") {
-        // ALL_COMMANDS[0] is the test command
         incrementCommandUsage(userId, ALL_COMMANDS[0]);
-
-        // Send a message into the channel where command was triggered from
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
           data: {
@@ -316,7 +318,6 @@ app.post(
             components: [
               {
                 type: MessageComponentTypes.TEXT_DISPLAY,
-                // Fetches a random emoji to send from a helper function
                 content: `hello world ${getRandomEmoji()}`,
               },
             ],
@@ -324,22 +325,10 @@ app.post(
         });
       }
 
-      // "challenge" command
+      // CHALLENGE (RPS)
       if (name === "challenge" && id) {
-        // Interaction context
-        const context = req.body.context;
-        // User ID is in user field for (G)DMs, and member for servers
-        const userId = req.body.member?.user?.id ?? req.body.user?.id;
-        // User's object choice
         const objectName = req.body.data.options[0].value;
-
-        // Create active game using message ID as the game ID
-        activeGames[id] = {
-          id: userId,
-          objectName,
-        };
-
-        // ALL_COMMANDS[1] is the challenge command
+        activeGames[id] = { id: userId, objectName };
         incrementCommandUsage(userId, ALL_COMMANDS[1]);
         initRecord(userId);
         initRecord(COMPUTER_ID);
@@ -351,7 +340,6 @@ app.post(
             components: [
               {
                 type: MessageComponentTypes.TEXT_DISPLAY,
-                // Fetches a random emoji to send from a helper function
                 content: `Rock papers scissors challenge from <@${userId}>`,
               },
               {
@@ -359,7 +347,6 @@ app.post(
                 components: [
                   {
                     type: MessageComponentTypes.BUTTON,
-                    // Append the game ID to use later on
                     custom_id: `accept_button_${req.body.id}`,
                     label: "Accept",
                     style: ButtonStyleTypes.PRIMARY,
@@ -371,78 +358,81 @@ app.post(
         });
       }
 
+      // RULES
       if (name === "rules") {
-        return res.send({
-        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: {
-          embeds: [
-            {
-              title: "Bot Theme & Rules",
-              description: BOT_THEME.description,
-              fields: [
-                { name: "Rules", value: BOT_THEME.rules.map((r,i)=>`${i+1}. ${r}`).join('\n') },
-                { name: "Example Commands", value: BOT_THEME.exampleCommands.join('\n') }
-              ],
-              color: 0x00ff00
-            }
-          ]
-        }
-      }
-    );
-  }
-
-      // --- JOKE COMMAND LOGIC ADDED HERE ---
-      if (name === "joke") {
-        // Find the joke command to pass to increment
-        const jokeCommand = ALL_COMMANDS.find((cmd) => cmd.name === "joke");
-        if (jokeCommand) {
-          incrementCommandUsage(userId, jokeCommand);
-        }
-
-        let jokeContent;
-        // Check if the user provided a number option
-        const choiceOption = options?.find((opt) => opt.name === "number");
-
-        if (choiceOption) {
-          const choice = choiceOption.value;
-          if (choice >= 1 && choice <= jokes.length) {
-            // Adjust for 0-based array index
-            jokeContent = `Joke #${choice}: ${jokes[choice - 1]}`;
-          } else {
-            jokeContent = `Sorry, I only have ${jokes.length} jokes. Please pick a number between 1 and ${jokes.length}.`;
-          }
-        } else {
-          // If no number is provided, pick a random joke
-          const randomIndex = Math.floor(Math.random() * jokes.length);
-          jokeContent = jokes[randomIndex];
-        }
-
-        // Send the joke back to the channel
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
           data: {
-            content: jokeContent,
+            embeds: [
+              {
+                title: "Bot Theme & Rules",
+                description: BOT_THEME.description,
+                fields: [
+                  {
+                    name: "Rules",
+                    value: BOT_THEME.rules
+                      .map((r, i) => `${i + 1}. ${r}`)
+                      .join("\n"),
+                  },
+                  {
+                    name: "Example Commands",
+                    value: BOT_THEME.exampleCommands.join("\n"),
+                  },
+                ],
+                color: 0x00ff00,
+              },
+            ],
           },
         });
       }
-      // --- END OF ADDED JOKE LOGIC ---
 
-      //Blackjack
-      if (name === "blackjack") {
-        // Track usage if you've defined it in ALL_COMMANDS
-        const bjCommand = ALL_COMMANDS.find((cmd) => cmd.name === "blackjack");
-        if (bjCommand) {
-          incrementCommandUsage(userId, bjCommand);
+      // COINFLIP
+      if (name === "coinflip") {
+        const coinflipCommand = ALL_COMMANDS.find(
+          (cmd) => cmd.name === "coinflip"
+        );
+        if (coinflipCommand) incrementCommandUsage(userId, coinflipCommand);
+        const result = Math.random() < 0.5 ? "Heads" : "Tails";
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: `🪙 The coin landed on **${result}**!` },
+        });
+      }
+
+      // JOKE
+      if (name === "joke") {
+        const jokeCommand = ALL_COMMANDS.find((cmd) => cmd.name === "joke");
+        if (jokeCommand) incrementCommandUsage(userId, jokeCommand);
+
+        let jokeContent;
+        const choiceOption = options?.find((opt) => opt.name === "number");
+        if (choiceOption) {
+          const num = choiceOption.value;
+          if (num >= 1 && num <= jokes.length)
+            jokeContent = `Joke #${num}: ${jokes[num - 1]}`;
+          else
+            jokeContent = `Please pick a number between 1 and ${jokes.length}.`;
+        } else {
+          const randomIndex = Math.floor(Math.random() * jokes.length);
+          jokeContent = jokes[randomIndex];
         }
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: jokeContent },
+        });
+      }
 
-        // Create a new blackjack game for this user
+      // BLACKJACK (yours)
+      if (name === "blackjack") {
+        const bjCommand = ALL_COMMANDS.find((cmd) => cmd.name === "blackjack");
+        if (bjCommand) incrementCommandUsage(userId, bjCommand);
+
         const game = {
           deck: createShuffledDeck(),
           playerHand: [],
           dealerHand: [],
         };
 
-        // Initial deal: 2 to player, 2 to dealer
         game.playerHand.push(drawCard(game));
         game.playerHand.push(drawCard(game));
         game.dealerHand.push(drawCard(game));
@@ -454,7 +444,7 @@ app.post(
 
         const content =
           `🃏 **Blackjack**\n` +
-          `Dealer: ${formatHand(game.dealerHand, true)}\n` + // show dealer's 2nd card only
+          `Dealer: ${formatHand(game.dealerHand, true)}\n` +
           `You: ${formatHand(game.playerHand)} (Total: ${playerTotal})\n\n` +
           `Hit or Stand?`;
 
@@ -491,22 +481,18 @@ app.post(
         });
       }
 
-      //Tic Tac Toe
+      // TIC TAC TOE (yours)
       if (name === "tictactoe") {
-        // log usage if you added it in ALL_COMMANDS
         const tttCommand = ALL_COMMANDS.find((cmd) => cmd.name === "tictactoe");
-        if (tttCommand) {
-          incrementCommandUsage(userId, tttCommand);
-        }
+        if (tttCommand) incrementCommandUsage(userId, tttCommand);
 
-        const gameId = id; // use the interaction id as game id
+        const gameId = id;
 
-        // create a brand new game
         tttGames[gameId] = {
-          xPlayerId: userId,         // the person who ran the command is X
-          oPlayerId: null,           // set when someone accepts
-          board: makeEmptyBoard(),   // 9 empty cells
-          currentTurn: "X",          // X always starts
+          xPlayerId: userId,
+          oPlayerId: null,
+          board: makeEmptyBoard(),
+          currentTurn: "X",
           isFinished: false,
           winner: null,
           isDraw: false,
@@ -523,43 +509,384 @@ app.post(
         });
       }
 
+      // GUESS THE SONG (main)
+      if (name === "guesssong") {
+        const songGameCommand = ALL_COMMANDS.find(
+          (cmd) => cmd.name === "guesssong"
+        );
+        if (songGameCommand) incrementCommandUsage(userId, songGameCommand);
+        const song = getRandomSong();
+        activeSongGames[id] = { userId, song };
 
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            flags: InteractionResponseFlags.IS_COMPONENTS_V2,
+            components: [
+              {
+                type: MessageComponentTypes.TEXT_DISPLAY,
+                content: `🎵 Guess the song from these emojis: ${song.emojis}`,
+              },
+              {
+                type: MessageComponentTypes.ACTION_ROW,
+                components: [
+                  {
+                    type: MessageComponentTypes.STRING_SELECT,
+                    custom_id: `guesssong_select_${id}`,
+                    options: songs.map((s, i) => ({
+                      label: s.title,
+                      value: String(i),
+                    })),
+                  },
+                ],
+              },
+            ],
+          },
+        });
+      }
+
+      // HANGMAN (main)
+      if (name === "hangman") {
+        const lengthOption = options?.find((o) => o.name === "number");
+        const requestedLength = lengthOption
+          ? Number(lengthOption.value)
+          : null;
+        let word = null;
+        if (requestedLength) word = pickWordByLength(requestedLength);
+        if (!word) word = pickRandomWord();
+
+        if (!word) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: "Sorry — no words available right now." },
+          });
+        }
+
+        activeHangmanGames[id] = {
+          word,
+          guessed: [],
+          wrong: 0,
+          wrongLetters: [],
+          maxWrong: 6,
+          host: userId,
+        };
+
+        const letters = "abcdefghijklmnopqrstuvwxyz".split("");
+        const first = letters
+          .slice(0, 13)
+          .map((ch) => ({ label: ch.toUpperCase(), value: ch }));
+        const second = letters
+          .slice(13)
+          .map((ch) => ({ label: ch.toUpperCase(), value: ch }));
+        const masked = maskWord(word, []);
+
+        const hangmanCmd = ALL_COMMANDS.find((c) => c.name === "hangman");
+        if (hangmanCmd) incrementCommandUsage(userId, hangmanCmd);
+
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            flags: InteractionResponseFlags.IS_COMPONENTS_V2,
+            components: [
+              {
+                type: MessageComponentTypes.TEXT_DISPLAY,
+                content: `Hangman started by <@${userId}> — Word: \`${masked}\`  (wrong: 0/6)`,
+              },
+              {
+                type: MessageComponentTypes.ACTION_ROW,
+                components: [
+                  {
+                    type: MessageComponentTypes.STRING_SELECT,
+                    custom_id: `hangman_guess_${id}_1`,
+                    placeholder: "Guess a letter (A-M)",
+                    options: first,
+                  },
+                ],
+              },
+              {
+                type: MessageComponentTypes.ACTION_ROW,
+                components: [
+                  {
+                    type: MessageComponentTypes.STRING_SELECT,
+                    custom_id: `hangman_guess_${id}_2`,
+                    placeholder: "Guess a letter (N-Z)",
+                    options: second,
+                  },
+                ],
+              },
+              {
+                type: MessageComponentTypes.ACTION_ROW,
+                components: [
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: `hangman_solve_${id}`,
+                    label: "Solve",
+                    style: ButtonStyleTypes.SECONDARY,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+      }
+
+      // HIGHER LOWER (main)
+      if (name === "higherlower") {
+        const hiloCommand = ALL_COMMANDS.find(
+          (cmd) => cmd.name === "higherlower"
+        );
+        if (hiloCommand) incrementCommandUsage(userId, hiloCommand);
+
+        const deck = shuffleDeck(createDeck());
+        const currentCard = deck.pop();
+        const nextCard = deck.pop();
+
+        activeHigherLowerGames[userId] = {
+          deck,
+          currentCard,
+          nextCard,
+          streak: 0,
+        };
+
+        const cardInfo = getCardInfo(currentCard);
+
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: `**Higher or Lower Game Started!**\n\nYour card is: **${cardInfo.name}**\nStreak: 0\nCards left in deck: ${deck.length}\n\nGuess if the next card will be...`,
+            components: [
+              {
+                type: MessageComponentTypes.ACTION_ROW,
+                components: [
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: "hilo_higher",
+                    label: "Higher",
+                    style: ButtonStyleTypes.PRIMARY,
+                  },
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: "hilo_lower",
+                    label: "Lower",
+                    style: ButtonStyleTypes.PRIMARY,
+                  },
+                ],
+              },
+              {
+                type: MessageComponentTypes.ACTION_ROW,
+                components: [
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: "hilo_red",
+                    label: "Red",
+                    style: ButtonStyleTypes.DANGER,
+                  },
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: "hilo_black",
+                    label: "Black",
+                    style: ButtonStyleTypes.SECONDARY,
+                  },
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: "hilo_end",
+                    label: "End Game",
+                    style: ButtonStyleTypes.SECONDARY,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+      }
+
+      // ZODIAC (main)
+      if (name === "zodiac") {
+        const zodiacCommand = ALL_COMMANDS.find((cmd) => cmd.name === "zodiac");
+        if (zodiacCommand) incrementCommandUsage(userId, zodiacCommand);
+
+        const monthOption = options.find((opt) => opt.name === "month");
+        const dayOption = options.find((opt) => opt.name === "day");
+        const month = monthOption ? monthOption.value : 0;
+        const day = dayOption ? dayOption.value : 0;
+        const signData = getZodiacSign(month, day);
+
+        if (!signData) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              content: `Invalid date provided (${month}/${day}). Please try again.`,
+            },
+          });
+        }
+
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: `🌌 **Astrology Fact** 🌌\n\n**Sign:** ${signData.sign}\n**Date:** ${month}/${day}\n\n✨ *${signData.fact}*`,
+          },
+        });
+      }
 
       console.error(`unknown command: ${name}`);
       return res.status(400).json({ error: "unknown command" });
     }
 
+    // -----------------------------------------
+    // COMPONENT INTERACTIONS
+    // -----------------------------------------
     if (type === InteractionType.MESSAGE_COMPONENT) {
-      // custom_id set in payload when sending message component
       const componentId = data.custom_id;
 
+      // HANGMAN GUESS (main)
+      if (componentId.startsWith("hangman_guess_")) {
+        const rest = componentId.substring("hangman_guess_".length);
+        const gameId = rest.replace(/_\d+$/, "");
+        const game = activeHangmanGames[gameId];
+        if (!game)
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags: InteractionResponseFlags.EPHEMERAL,
+              content: "Game not found.",
+            },
+          });
+
+        const letter = data.values[0].toLowerCase();
+        if (game.guessed.includes(letter)) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags: InteractionResponseFlags.EPHEMERAL,
+              content: "Already guessed.",
+            },
+          });
+        }
+        game.guessed.push(letter);
+        if (!game.word.includes(letter)) {
+          game.wrongLetters.push(letter.toUpperCase());
+          game.wrong++;
+        }
+        const masked = maskWord(game.word, game.guessed);
+
+        const letters = "abcdefghijklmnopqrstuvwxyz".split("");
+        const guessedSet = new Set(game.guessed);
+        const first = letters
+          .slice(0, 13)
+          .filter((ch) => !guessedSet.has(ch))
+          .map((ch) => ({ label: ch.toUpperCase(), value: ch }));
+        const second = letters
+          .slice(13)
+          .filter((ch) => !guessedSet.has(ch))
+          .map((ch) => ({ label: ch.toUpperCase(), value: ch }));
+
+        const content =
+          game.wrong >= game.maxWrong
+            ? `☠️ Game over — the word was **${game.word}**`
+            : !masked.includes("_")
+            ? `🎉 Solved! The word was **${game.word}**`
+            : `Hangman — Word: \`${masked}\`  (wrong: ${game.wrong}/${game.maxWrong})`;
+
+        if (game.wrong >= game.maxWrong || !masked.includes("_"))
+          delete activeHangmanGames[gameId];
+
+        return res.send({
+          type: InteractionResponseType.UPDATE_MESSAGE,
+          data: {
+            content: content,
+            components:
+              game.wrong >= game.maxWrong || !masked.includes("_")
+                ? []
+                : [
+                    ...(first.length
+                      ? [
+                          {
+                            type: MessageComponentTypes.ACTION_ROW,
+                            components: [
+                              {
+                                type: MessageComponentTypes.STRING_SELECT,
+                                custom_id: `hangman_guess_${gameId}_1`,
+                                placeholder: "Guess (A-M)",
+                                options: first,
+                              },
+                            ],
+                          },
+                        ]
+                      : []),
+                    ...(second.length
+                      ? [
+                          {
+                            type: MessageComponentTypes.ACTION_ROW,
+                            components: [
+                              {
+                                type: MessageComponentTypes.STRING_SELECT,
+                                custom_id: `hangman_guess_${gameId}_2`,
+                                placeholder: "Guess (N-Z)",
+                                options: second,
+                              },
+                            ],
+                          },
+                        ]
+                      : []),
+                    {
+                      type: MessageComponentTypes.ACTION_ROW,
+                      components: [
+                        {
+                          type: MessageComponentTypes.BUTTON,
+                          custom_id: `hangman_solve_${gameId}`,
+                          label: "Solve",
+                          style: ButtonStyleTypes.SECONDARY,
+                        },
+                      ],
+                    },
+                  ],
+          },
+        });
+      }
+
+      // HANGMAN SOLVE BUTTON (main)
+      if (componentId.startsWith("hangman_solve_")) {
+        const gameId = componentId.replace("hangman_solve_", "");
+        return res.send({
+          type: InteractionResponseType.MODAL,
+          data: {
+            custom_id: `hangman_solve_modal_${gameId}`,
+            title: "Solve Hangman",
+            components: [
+              {
+                type: 1,
+                components: [
+                  {
+                    type: 4,
+                    custom_id: "solve_input",
+                    style: 1,
+                    label: "Enter full word",
+                    required: true,
+                    min_length: 1,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+      }
+
+      // RPS ACCEPT BUTTON (MERGED: your records + main flow)
       if (componentId.startsWith("accept_button_")) {
-        // get the associated game ID
         const gameId = componentId.replace("accept_button_", "");
-        // Delete message with token in request body
         const endpoint = `webhooks/${process.env.APP_ID}/${req.body.token}/messages/${req.body.message.id}`;
 
-        // Who clicked "Accept"
         const actorId = req.body.member?.user?.id ?? req.body.user?.id;
         const challengerId = activeGames[gameId]?.id;
 
-        console.log("ACCEPT click", {
-          gameId,
-          actorId,
-          challengerId,
-          hasGame: !!activeGames[gameId],
-        });
-
-        //vs Computer
+        // VS COMPUTER
         if (challengerId && actorId === challengerId) {
           try {
             const challengerChoice = activeGames[gameId].objectName;
             const botChoice = randomRps();
 
-            // decide outcome
-            const whoWon = decideOutcome(challengerChoice, botChoice); // 'p1' | 'p2' | 'tie'
+            const whoWon = decideOutcome(challengerChoice, botChoice);
 
-            // update records: challenger (p1) vs Computer (p2)
             if (whoWon === "p1") {
               bumpRecord(challengerId, "win");
               bumpRecord(COMPUTER_ID, "lose");
@@ -573,6 +900,7 @@ app.post(
 
             const cRec = winLoss[challengerId];
             const bRec = winLoss[COMPUTER_ID];
+
             const header = `Rock paper scissors vs ${COMPUTER_NAME}`;
             const summary = `<@${challengerId}> chose **${challengerChoice}**, ${COMPUTER_NAME} chose **${botChoice}**.`;
             const outcomeLine =
@@ -581,12 +909,12 @@ app.post(
                 : whoWon === "p2"
                 ? `${COMPUTER_NAME} wins!`
                 : `It's a tie!`;
+
             const recordsLine =
               `\n\n**Records**\n` +
               `• <@${challengerId}> — ${cRec.wins}-${cRec.losses}-${cRec.ties}\n` +
               `• ${COMPUTER_NAME} — ${bRec.wins}-${bRec.losses}-${bRec.ties}`;
 
-            // send the public result
             await res.send({
               type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
               data: {
@@ -600,10 +928,7 @@ app.post(
               },
             });
 
-            // delete the original challenge message (remove Accept button)
             await DiscordRequest(endpoint, { method: "DELETE" });
-
-            // close out the game
             delete activeGames[gameId];
             return;
           } catch (err) {
@@ -611,12 +936,11 @@ app.post(
           }
         }
 
-        // --- Normal two-player path
+        // VS PLAYER (Ephemeral Select)
         try {
           await res.send({
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
             data: {
-              // Indicates it'll be an ephemeral message
               flags:
                 InteractionResponseFlags.EPHEMERAL |
                 InteractionResponseFlags.IS_COMPONENTS_V2,
@@ -630,7 +954,6 @@ app.post(
                   components: [
                     {
                       type: MessageComponentTypes.STRING_SELECT,
-                      // Append game ID
                       custom_id: `select_choice_${gameId}`,
                       options: getShuffledOptions(),
                     },
@@ -639,33 +962,27 @@ app.post(
               ],
             },
           });
-          // Delete previous message
           await DiscordRequest(endpoint, { method: "DELETE" });
         } catch (err) {
           console.error("Error sending message:", err);
         }
-      } else if (componentId.startsWith("select_choice_")) {
-        // get the associated game ID
-        const gameId = componentId.replace("select_choice_", "");
+        return;
+      }
 
+      // RPS SELECT CHOICE (MERGED: your records)
+      if (componentId.startsWith("select_choice_")) {
+        const gameId = componentId.replace("select_choice_", "");
         if (activeGames[gameId]) {
-          // Interaction context
-          const context = req.body.context;
-          // Get user ID and object choice for responding user
-          // User ID is in user field for (G)DMs, and member for servers
           const userId = req.body.member?.user?.id ?? req.body.user?.id;
           const objectName = data.values[0];
 
-          // challenger (p1) vs opponent (p2)
           const challengerId = activeGames[gameId].id;
           const challengerChoice = activeGames[gameId].objectName;
           const opponentId = userId;
           const opponentChoice = objectName;
 
-          // Decide outcome without string parsing
-          const whoWon = decideOutcome(challengerChoice, opponentChoice); // 'p1' | 'p2' | 'tie'
+          const whoWon = decideOutcome(challengerChoice, opponentChoice);
 
-          // Update records
           if (whoWon === "p1") {
             bumpRecord(challengerId, "win");
             bumpRecord(opponentId, "lose");
@@ -677,19 +994,16 @@ app.post(
             bumpRecord(opponentId, "tie");
           }
 
-          // Calculate result from helper function
           const resultStr = getResult(
             { id: challengerId, objectName: challengerChoice },
             { id: opponentId, objectName: opponentChoice }
           );
 
-          // Remove game from storage
           delete activeGames[gameId];
-          // Update message with token in request body
           const endpoint = `webhooks/${process.env.APP_ID}/${req.body.token}/messages/${req.body.message.id}`;
 
-          const cRec = winLoss[challengerId];
-          const oRec = winLoss[opponentId];
+          const cRec = winLoss[challengerId] ?? { wins: 0, losses: 0, ties: 0 };
+          const oRec = winLoss[opponentId] ?? { wins: 0, losses: 0, ties: 0 };
 
           const recordsLine =
             `\n\n**Records**\n` +
@@ -697,7 +1011,6 @@ app.post(
             `• <@${opponentId}> — ${oRec.wins}-${oRec.losses}-${oRec.ties}`;
 
           try {
-            // Send results
             await res.send({
               type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
               data: {
@@ -710,7 +1023,7 @@ app.post(
                 ],
               },
             });
-            // Update ephemeral message
+
             await DiscordRequest(endpoint, {
               method: "PATCH",
               body: {
@@ -726,14 +1039,16 @@ app.post(
             console.error("Error sending message:", err);
           }
         }
-      } else if (
+      }
+
+      // BLACKJACK BUTTONS (yours)
+      if (
         componentId.startsWith("bj_hit_") ||
         componentId.startsWith("bj_stand_")
       ) {
         const clickerId = req.body.member?.user?.id ?? req.body.user?.id;
-        const userIdFromId = componentId.split("_").at(-1); // "bj_hit_<userId>"
+        const userIdFromId = componentId.split("_").at(-1);
 
-        // Prevent other users from messing with your game
         if (userIdFromId !== clickerId) {
           return res.send({
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -770,10 +1085,8 @@ app.post(
           });
         }
 
-        // Base message title
         let message = "🃏 **Blackjack**\n";
 
-        // ----- HIT -----
         if (componentId.startsWith("bj_hit_")) {
           game.playerHand.push(drawCard(game));
 
@@ -781,7 +1094,6 @@ app.post(
           const dealerShown = formatHand(game.dealerHand, true);
           const playerHandStr = formatHand(game.playerHand);
 
-          // Player busts
           if (playerTotal > 21) {
             const dealerTotal = getHandValue(game.dealerHand);
             const dealerHandStr = formatHand(game.dealerHand);
@@ -809,7 +1121,6 @@ app.post(
             });
           }
 
-          // Still in game
           message +=
             `Dealer: ${dealerShown}\n` +
             `You: ${playerHandStr} (Total: ${playerTotal})\n\n` +
@@ -848,9 +1159,7 @@ app.post(
           });
         }
 
-        // ----- STAND -----
         if (componentId.startsWith("bj_stand_")) {
-          // Dealer draws to 17+
           while (getHandValue(game.dealerHand) < 17) {
             game.dealerHand.push(drawCard(game));
           }
@@ -891,12 +1200,12 @@ app.post(
             },
           });
         }
+      }
 
-      }      // Someone clicked "Accept" on Tic Tac Toe
-      else if (componentId.startsWith("ttt_accept_")) {
+      // TTT ACCEPT (yours)
+      if (componentId.startsWith("ttt_accept_")) {
         const gameId = componentId.replace("ttt_accept_", "");
         const game = tttGames[gameId];
-
         const clickerId = req.body.member?.user?.id ?? req.body.user?.id;
 
         if (!game) {
@@ -916,7 +1225,6 @@ app.post(
           });
         }
 
-        // Challenger can't accept their own challenge
         if (clickerId === game.xPlayerId) {
           return res.send({
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -934,7 +1242,6 @@ app.post(
           });
         }
 
-        // If already has an opponent and it's not the same person
         if (game.oPlayerId && game.oPlayerId !== clickerId) {
           return res.send({
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -952,7 +1259,6 @@ app.post(
           });
         }
 
-        // Set O player and update message to show the board
         game.oPlayerId = clickerId;
 
         return res.send({
@@ -963,10 +1269,11 @@ app.post(
           },
         });
       }
-      else if (componentId.startsWith("ttt_move_")) {
-        const clickerId = req.body.member?.user?.id ?? req.body.user?.id;
 
-        const parts = componentId.split("_"); // ['ttt', 'move', gameId, index]
+      // TTT MOVE (yours)
+      if (componentId.startsWith("ttt_move_")) {
+        const clickerId = req.body.member?.user?.id ?? req.body.user?.id;
+        const parts = componentId.split("_");
         const gameId = parts[2];
         const cellIndex = Number(parts[3]);
 
@@ -989,7 +1296,6 @@ app.post(
           });
         }
 
-        // Only X and O can play
         if (clickerId !== game.xPlayerId && clickerId !== game.oPlayerId) {
           return res.send({
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -1024,15 +1330,8 @@ app.post(
           });
         }
 
-        // Figure out if this player is X or O
-        let marker;
-        if (clickerId === game.xPlayerId) {
-          marker = "X";
-        } else {
-          marker = "O";
-        }
+        const marker = clickerId === game.xPlayerId ? "X" : "O";
 
-        // Check turn
         if (marker !== game.currentTurn) {
           return res.send({
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -1050,7 +1349,6 @@ app.post(
           });
         }
 
-        // Check index
         if (Number.isNaN(cellIndex) || cellIndex < 0 || cellIndex > 8) {
           return res.send({
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -1068,7 +1366,6 @@ app.post(
           });
         }
 
-        // Check if cell already used
         if (game.board[cellIndex] !== null) {
           return res.send({
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -1086,10 +1383,8 @@ app.post(
           });
         }
 
-        // Place the move
         game.board[cellIndex] = marker;
 
-        // Check for winner / draw
         const win = checkTttWinner(game.board);
         if (win) {
           game.isFinished = true;
@@ -1098,15 +1393,9 @@ app.post(
           game.isFinished = true;
           game.isDraw = true;
         } else {
-          // Switch turn
-          if (game.currentTurn === "X") {
-            game.currentTurn = "O";
-          } else {
-            game.currentTurn = "X";
-          }
+          game.currentTurn = game.currentTurn === "X" ? "O" : "X";
         }
 
-        // Update original message with new board
         return res.send({
           type: InteractionResponseType.UPDATE_MESSAGE,
           data: {
@@ -1116,7 +1405,146 @@ app.post(
         });
       }
 
+      // GUESS SONG SELECT (main)
+      if (componentId.startsWith("guesssong_select_")) {
+        const gameId = componentId.replace("guesssong_select_", "");
+        const selectedIndex = Number(data.values[0]);
+        const game = activeSongGames[gameId];
+        if (!game)
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: "❌ Game not found or expired." },
+          });
+
+        const correctIndex = songs.findIndex(
+          (s) => s.title === game.song.title
+        );
+        const message =
+          selectedIndex === correctIndex
+            ? `🎉 Correct! The song was **${game.song.title}**`
+            : `❌ Wrong! The correct answer was **${game.song.title}**`;
+        delete activeSongGames[gameId];
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: message },
+        });
+      }
+
+      // HIGHER LOWER BUTTONS (main)
+      if (componentId.startsWith("hilo_")) {
+        const userId = req.body.member?.user?.id ?? req.body.user?.id;
+        const game = activeHigherLowerGames[userId];
+        if (!game)
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+            data: { content: "Game expired/not found.", components: [] },
+          });
+
+        const guess = componentId.replace("hilo_", "");
+        if (guess === "end") {
+          delete activeHigherLowerGames[userId];
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+            data: {
+              content: `Game ended. Final streak: **${game.streak}**!`,
+              components: [],
+            },
+          });
+        }
+
+        const currentInfo = getCardInfo(game.currentCard);
+        const nextInfo = getCardInfo(game.nextCard);
+        let correct = false;
+        if (guess === "higher") correct = nextInfo.value > currentInfo.value;
+        else if (guess === "lower")
+          correct = nextInfo.value < currentInfo.value;
+        else if (guess === "red") correct = nextInfo.color === "Red";
+        else if (guess === "black") correct = nextInfo.color === "Black";
+
+        if (correct) {
+          game.streak++;
+          if (game.deck.length === 0) {
+            const finalStreak = game.streak;
+            delete activeHigherLowerGames[userId];
+            return res.send({
+              type: InteractionResponseType.UPDATE_MESSAGE,
+              data: {
+                content: `Correct! The card was **${nextInfo.name}**. Deck finished! 🏆 Final Streak: ${finalStreak}`,
+                components: [],
+              },
+            });
+          }
+          game.currentCard = game.nextCard;
+          game.nextCard = game.deck.pop();
+          activeHigherLowerGames[userId] = game;
+          const newCurrentInfo = getCardInfo(game.currentCard);
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+            data: {
+              content: `Correct! The card was **${
+                nextInfo.name
+              }**. ${getRandomEmoji()}\nNew card: **${
+                newCurrentInfo.name
+              }**\nStreak: ${game.streak}\nGuess next...`,
+              components: req.body.message.components,
+            },
+          });
+        } else {
+          const finalStreak = game.streak;
+          delete activeHigherLowerGames[userId];
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+            data: {
+              content: `Wrong! The card was **${nextInfo.name}**. 😥\nGame over. Final streak: **${finalStreak}**.`,
+              components: [],
+            },
+          });
+        }
+      }
+
       return;
+    }
+
+    // -----------------------------------------
+    // MODAL SUBMITS (Hangman Solve)
+    // -----------------------------------------
+    if (type === InteractionType.MODAL_SUBMIT) {
+      const modalId = data.custom_id;
+      if (modalId.startsWith("hangman_solve_modal_")) {
+        const gameId = modalId.replace("hangman_solve_modal_", "");
+        const game = activeHangmanGames[gameId];
+        const guess = req.body.data?.components?.[0]?.components?.[0]?.value;
+
+        if (!game || !guess)
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags: InteractionResponseFlags.EPHEMERAL,
+              content: "Error processing solve.",
+            },
+          });
+
+        if (guess.trim().toLowerCase() === game.word.toLowerCase()) {
+          delete activeHangmanGames[gameId];
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              content: `🎉 <@${
+                req.body.member?.user?.id ?? req.body.user?.id
+              }> solved it! Word: **${game.word}**`,
+            },
+          });
+        } else {
+          game.wrong++;
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags: InteractionResponseFlags.EPHEMERAL,
+              content: `Incorrect. Wrong: ${game.wrong}/${game.maxWrong}`,
+            },
+          });
+        }
+      }
     }
 
     console.error("unknown interaction type", type);
