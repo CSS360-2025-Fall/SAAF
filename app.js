@@ -9,7 +9,6 @@ import {
   verifyKeyMiddleware,
 } from "discord-interactions";
 import { getRandomEmoji, DiscordRequest } from "./utils.js";
-// Imported everything from game.js, including new Hangman logic
 import {
   getShuffledOptions,
   getResult,
@@ -28,12 +27,21 @@ const winLoss = Object.create(null);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Game States
-const activeGames = {};
+// -------------------------
+// Base game states
+// -------------------------
+const activeGames = {};               // RPS challenges
+const blackjackGames = {};            // Your blackjack
+const tttGames = {};                  // Your tic tac toe
+
+// Main branch game states
 const activeHangmanGames = {};
 const activeHigherLowerGames = {};
 const activeSongGames = {};
 
+// -------------------------
+// Bot theme and rules
+// -------------------------
 const BOT_THEME = {
   description:
     "A fun Discord bot to play quick games like Rock Paper Scissors with friends!",
@@ -50,13 +58,18 @@ const BOT_THEME = {
   ],
 };
 
+// -------------------------
+// /joke data (both branches match)
+// -------------------------
 const jokes = [
   "Why do JavaScript developers wear glasses? Because they don't C#!",
   "What's the object-oriented way to become wealthy? Inheritance.",
   "Why did the programmer quit his job? Because he didn't get arrays.",
 ];
 
-// GUESS THE SONG DATA
+// -------------------------
+// Guess the Song data (main)
+// -------------------------
 const songs = [
   { title: "Baby - Justin Bieber", emojis: "👶💕🎶" },
   { title: "Circus - Britney Spears", emojis: "🎪🤹‍♀️✨" },
@@ -78,11 +91,14 @@ function randomRps() {
   return opts[Math.floor(Math.random() * opts.length)];
 }
 
+// -------------------------
+// Win/Loss helpers (yours)
+// -------------------------
 function initRecord(userId) {
   if (!winLoss[userId]) winLoss[userId] = { wins: 0, losses: 0, ties: 0 };
 }
 
-function bumpRecord(userId, outcome) {
+function bumpRecord(userId, outcome /* 'win' | 'lose' | 'tie' */) {
   initRecord(userId);
   if (outcome === "win") winLoss[userId].wins++;
   else if (outcome === "lose") winLoss[userId].losses++;
@@ -97,6 +113,182 @@ function decideOutcome(p1Choice, p2Choice) {
   return beats[a] === b ? "p1" : "p2";
 }
 
+// -------------------------
+// Blackjack helpers (yours)
+// -------------------------
+const BJ_SUITS = ["♠", "♥", "♦", "♣"];
+const BJ_RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+
+function createShuffledDeck() {
+  const deck = [];
+  for (const suit of BJ_SUITS) {
+    for (const rank of BJ_RANKS) {
+      deck.push({ rank, suit });
+    }
+  }
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+}
+
+function drawCard(game) {
+  return game.deck.pop();
+}
+
+function getHandValue(hand) {
+  let total = 0;
+  let aces = 0;
+
+  for (const card of hand) {
+    if (card.rank === "A") {
+      total += 11;
+      aces += 1;
+    } else if (["K", "Q", "J"].includes(card.rank)) {
+      total += 10;
+    } else {
+      total += Number(card.rank);
+    }
+  }
+
+  while (total > 21 && aces > 0) {
+    total -= 10;
+    aces -= 1;
+  }
+
+  return total;
+}
+
+function formatHand(hand, hideFirst = false) {
+  if (!hand || hand.length === 0) return "(no cards)";
+
+  if (hideFirst && hand.length > 0) {
+    const [, ...rest] = hand;
+    return `🂠 ${rest.map((c) => `${c.rank}${c.suit}`).join(" ")}`;
+  }
+
+  return hand.map((c) => `${c.rank}${c.suit}`).join(" ");
+}
+
+// -------------------------
+// TicTacToe helpers (yours)
+// -------------------------
+function makeEmptyBoard() {
+  return Array(9).fill(null);
+}
+
+const TTT_LINES = [
+  [0, 1, 2],
+  [3, 4, 5],
+  [6, 7, 8],
+  [0, 3, 6],
+  [1, 4, 7],
+  [2, 5, 8],
+  [0, 4, 8],
+  [2, 4, 6],
+];
+
+function checkTttWinner(board) {
+  for (const line of TTT_LINES) {
+    const [a, b, c] = line;
+    if (board[a] && board[a] === board[b] && board[b] === board[c]) {
+      return board[a];
+    }
+  }
+  return null;
+}
+
+function isBoardFull(board) {
+  return board.every((cell) => cell !== null);
+}
+
+function cellToSymbol(cell) {
+  if (cell === "X") return "X";
+  if (cell === "O") return "O";
+  return "▢";
+}
+
+function makeTttText(game) {
+  const { xPlayerId, oPlayerId, board, currentTurn, winner, isDraw } = game;
+
+  const row1 = `${cellToSymbol(board[0])} ${cellToSymbol(board[1])} ${cellToSymbol(board[2])}`;
+  const row2 = `${cellToSymbol(board[3])} ${cellToSymbol(board[4])} ${cellToSymbol(board[5])}`;
+  const row3 = `${cellToSymbol(board[6])} ${cellToSymbol(board[7])} ${cellToSymbol(board[8])}`;
+
+  let header = `**Tic Tac Toe**\nX = <@${xPlayerId}>`;
+
+  if (oPlayerId) header += `\nO = <@${oPlayerId}>`;
+  else header += `\nO = waiting for someone to accept...`;
+
+  if (winner) {
+    const winnerId = winner === "X" ? xPlayerId : oPlayerId;
+    header += `\n\n <@${winnerId}> (${winner}) wins!`;
+  } else if (isDraw) {
+    header += `\n\n It's a draw!`;
+  } else if (oPlayerId) {
+    const currentPlayerId = currentTurn === "X" ? xPlayerId : oPlayerId;
+    header += `\n\nIt's <@${currentPlayerId}>'s turn (${currentTurn}).`;
+  } else {
+    header += `\n\nPress **Accept** to join the game.`;
+  }
+
+  return `${header}\n\n${row1}\n${row2}\n${row3}`;
+}
+
+function makeTttComponents(gameId, game) {
+  const { board, isFinished, oPlayerId } = game;
+
+  if (!oPlayerId) {
+    return [
+      {
+        type: MessageComponentTypes.ACTION_ROW,
+        components: [
+          {
+            type: MessageComponentTypes.BUTTON,
+            custom_id: `ttt_accept_${gameId}`,
+            label: "Accept",
+            style: ButtonStyleTypes.PRIMARY,
+          },
+        ],
+      },
+    ];
+  }
+
+  const rows = [];
+  for (let row = 0; row < 3; row++) {
+    const startIndex = row * 3;
+    rows.push({
+      type: MessageComponentTypes.ACTION_ROW,
+      components: [0, 1, 2].map((offset) => {
+        const index = startIndex + offset;
+        const cell = board[index];
+
+        let label = "\u200B";
+        if (cell === "X") label = "X";
+        else if (cell === "O") label = "O";
+
+        let style = ButtonStyleTypes.SECONDARY;
+        if (cell === "X") style = ButtonStyleTypes.PRIMARY;
+        else if (cell === "O") style = ButtonStyleTypes.DANGER;
+
+        return {
+          type: MessageComponentTypes.BUTTON,
+          custom_id: `ttt_move_${gameId}_${index}`,
+          label,
+          style,
+          disabled: isFinished || cell !== null,
+        };
+      }),
+    });
+  }
+
+  return rows;
+}
+
+// -------------------------
+// Interactions endpoint
+// -------------------------
 app.post(
   "/interactions",
   verifyKeyMiddleware(process.env.PUBLIC_KEY),
@@ -230,7 +422,94 @@ app.post(
         });
       }
 
-      // GUESS THE SONG
+      // BLACKJACK (yours)
+      if (name === "blackjack") {
+        const bjCommand = ALL_COMMANDS.find((cmd) => cmd.name === "blackjack");
+        if (bjCommand) incrementCommandUsage(userId, bjCommand);
+
+        const game = {
+          deck: createShuffledDeck(),
+          playerHand: [],
+          dealerHand: [],
+        };
+
+        game.playerHand.push(drawCard(game));
+        game.playerHand.push(drawCard(game));
+        game.dealerHand.push(drawCard(game));
+        game.dealerHand.push(drawCard(game));
+
+        blackjackGames[userId] = game;
+
+        const playerTotal = getHandValue(game.playerHand);
+
+        const content =
+          `🃏 **Blackjack**\n` +
+          `Dealer: ${formatHand(game.dealerHand, true)}\n` +
+          `You: ${formatHand(game.playerHand)} (Total: ${playerTotal})\n\n` +
+          `Hit or Stand?`;
+
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            flags:
+              InteractionResponseFlags.EPHEMERAL |
+              InteractionResponseFlags.IS_COMPONENTS_V2,
+            components: [
+              {
+                type: MessageComponentTypes.TEXT_DISPLAY,
+                content,
+              },
+              {
+                type: MessageComponentTypes.ACTION_ROW,
+                components: [
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: `bj_hit_${userId}`,
+                    label: "Hit",
+                    style: ButtonStyleTypes.PRIMARY,
+                  },
+                  {
+                    type: MessageComponentTypes.BUTTON,
+                    custom_id: `bj_stand_${userId}`,
+                    label: "Stand",
+                    style: ButtonStyleTypes.SECONDARY,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+      }
+
+      // TIC TAC TOE (yours)
+      if (name === "tictactoe") {
+        const tttCommand = ALL_COMMANDS.find((cmd) => cmd.name === "tictactoe");
+        if (tttCommand) incrementCommandUsage(userId, tttCommand);
+
+        const gameId = id;
+
+        tttGames[gameId] = {
+          xPlayerId: userId,
+          oPlayerId: null,
+          board: makeEmptyBoard(),
+          currentTurn: "X",
+          isFinished: false,
+          winner: null,
+          isDraw: false,
+        };
+
+        const game = tttGames[gameId];
+
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: makeTttText(game),
+            components: makeTttComponents(gameId, game),
+          },
+        });
+      }
+
+      // GUESS THE SONG (main)
       if (name === "guesssong") {
         const songGameCommand = ALL_COMMANDS.find(
           (cmd) => cmd.name === "guesssong"
@@ -266,7 +545,7 @@ app.post(
         });
       }
 
-      // HANGMAN
+      // HANGMAN (main)
       if (name === "hangman") {
         const lengthOption = options?.find((o) => o.name === "number");
         const requestedLength = lengthOption
@@ -351,7 +630,7 @@ app.post(
         });
       }
 
-      // HIGHER LOWER
+      // HIGHER LOWER (main)
       if (name === "higherlower") {
         const hiloCommand = ALL_COMMANDS.find(
           (cmd) => cmd.name === "higherlower"
@@ -421,7 +700,7 @@ app.post(
         });
       }
 
-      // ZODIAC
+      // ZODIAC (main)
       if (name === "zodiac") {
         const zodiacCommand = ALL_COMMANDS.find((cmd) => cmd.name === "zodiac");
         if (zodiacCommand) incrementCommandUsage(userId, zodiacCommand);
@@ -459,7 +738,7 @@ app.post(
     if (type === InteractionType.MESSAGE_COMPONENT) {
       const componentId = data.custom_id;
 
-      // HANGMAN GUESS
+      // HANGMAN GUESS (main)
       if (componentId.startsWith("hangman_guess_")) {
         const rest = componentId.substring("hangman_guess_".length);
         const gameId = rest.replace(/_\d+$/, "");
@@ -565,7 +844,7 @@ app.post(
         });
       }
 
-      // HANGMAN SOLVE BUTTON
+      // HANGMAN SOLVE BUTTON (main)
       if (componentId.startsWith("hangman_solve_")) {
         const gameId = componentId.replace("hangman_solve_", "");
         return res.send({
@@ -592,111 +871,330 @@ app.post(
         });
       }
 
-      // RPS ACCEPT BUTTON
+      // RPS ACCEPT BUTTON (MERGED: your records + main flow)
       if (componentId.startsWith("accept_button_")) {
         const gameId = componentId.replace("accept_button_", "");
         const endpoint = `webhooks/${process.env.APP_ID}/${req.body.token}/messages/${req.body.message.id}`;
+
         const actorId = req.body.member?.user?.id ?? req.body.user?.id;
         const challengerId = activeGames[gameId]?.id;
 
+        // VS COMPUTER
         if (challengerId && actorId === challengerId) {
-          // VS COMPUTER
-          const challengerChoice = activeGames[gameId].objectName;
-          const botChoice = randomRps();
-          const whoWon = decideOutcome(challengerChoice, botChoice);
-          if (whoWon === "p1") {
-            bumpRecord(challengerId, "win");
-            bumpRecord(COMPUTER_ID, "lose");
-          } else if (whoWon === "p2") {
-            bumpRecord(challengerId, "lose");
-            bumpRecord(COMPUTER_ID, "win");
-          } else {
-            bumpRecord(challengerId, "tie");
-            bumpRecord(COMPUTER_ID, "tie");
-          }
+          try {
+            const challengerChoice = activeGames[gameId].objectName;
+            const botChoice = randomRps();
 
-          const cRec = winLoss[challengerId];
-          const bRec = winLoss[COMPUTER_ID];
-          const summary =
-            `<@${challengerId}> chose **${challengerChoice}**, ${COMPUTER_NAME} chose **${botChoice}**.\n\n` +
-            (whoWon === "p1"
-              ? `<@${challengerId}> wins!`
-              : whoWon === "p2"
-              ? `${COMPUTER_NAME} wins!`
-              : `It's a tie!`) +
-            `\n\n**Records**\n• <@${challengerId}> — ${cRec.wins}-${cRec.losses}-${cRec.ties}\n• ${COMPUTER_NAME} — ${bRec.wins}-${bRec.losses}-${bRec.ties}`;
+            const whoWon = decideOutcome(challengerChoice, botChoice);
 
-          await res.send({
-            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: summary },
-          });
-          await DiscordRequest(endpoint, { method: "DELETE" });
-          delete activeGames[gameId];
-          return;
-        }
+            if (whoWon === "p1") {
+              bumpRecord(challengerId, "win");
+              bumpRecord(COMPUTER_ID, "lose");
+            } else if (whoWon === "p2") {
+              bumpRecord(challengerId, "lose");
+              bumpRecord(COMPUTER_ID, "win");
+            } else {
+              bumpRecord(challengerId, "tie");
+              bumpRecord(COMPUTER_ID, "tie");
+            }
 
-        // VS PLAYER (Ephemeral Select)
-        await res.send({
-          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: {
-            flags: InteractionResponseFlags.EPHEMERAL,
-            content: "What is your object of choice?",
-            components: [
-              {
-                type: MessageComponentTypes.ACTION_ROW,
+            const cRec = winLoss[challengerId];
+            const bRec = winLoss[COMPUTER_ID];
+
+            const header = `Rock paper scissors vs ${COMPUTER_NAME}`;
+            const summary = `<@${challengerId}> chose **${challengerChoice}**, ${COMPUTER_NAME} chose **${botChoice}**.`;
+            const outcomeLine =
+              whoWon === "p1"
+                ? `<@${challengerId}> wins!`
+                : whoWon === "p2"
+                ? `${COMPUTER_NAME} wins!`
+                : `It's a tie!`;
+
+            const recordsLine =
+              `\n\n**Records**\n` +
+              `• <@${challengerId}> — ${cRec.wins}-${cRec.losses}-${cRec.ties}\n` +
+              `• ${COMPUTER_NAME} — ${bRec.wins}-${bRec.losses}-${bRec.ties}`;
+
+            await res.send({
+              type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+              data: {
+                flags: InteractionResponseFlags.IS_COMPONENTS_V2,
                 components: [
                   {
-                    type: MessageComponentTypes.STRING_SELECT,
-                    custom_id: `select_choice_${gameId}`,
-                    options: getShuffledOptions(),
+                    type: MessageComponentTypes.TEXT_DISPLAY,
+                    content: `${header}\n${summary}\n${outcomeLine}${recordsLine}`,
                   },
                 ],
               },
-            ],
-          },
-        });
-        await DiscordRequest(endpoint, { method: "DELETE" });
+            });
+
+            await DiscordRequest(endpoint, { method: "DELETE" });
+            delete activeGames[gameId];
+            return;
+          } catch (err) {
+            console.error("Self-accept (vs Computer) flow error:", err);
+          }
+        }
+
+        // VS PLAYER (Ephemeral Select)
+        try {
+          await res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags:
+                InteractionResponseFlags.EPHEMERAL |
+                InteractionResponseFlags.IS_COMPONENTS_V2,
+              components: [
+                {
+                  type: MessageComponentTypes.TEXT_DISPLAY,
+                  content: "What is your object of choice?",
+                },
+                {
+                  type: MessageComponentTypes.ACTION_ROW,
+                  components: [
+                    {
+                      type: MessageComponentTypes.STRING_SELECT,
+                      custom_id: `select_choice_${gameId}`,
+                      options: getShuffledOptions(),
+                    },
+                  ],
+                },
+              ],
+            },
+          });
+          await DiscordRequest(endpoint, { method: "DELETE" });
+        } catch (err) {
+          console.error("Error sending message:", err);
+        }
         return;
       }
 
-      // RPS SELECT CHOICE
+      // RPS SELECT CHOICE (MERGED: your records)
       if (componentId.startsWith("select_choice_")) {
         const gameId = componentId.replace("select_choice_", "");
         if (activeGames[gameId]) {
           const userId = req.body.member?.user?.id ?? req.body.user?.id;
           const objectName = data.values[0];
+
           const challengerId = activeGames[gameId].id;
           const challengerChoice = activeGames[gameId].objectName;
-          const whoWon = decideOutcome(challengerChoice, objectName);
+          const opponentId = userId;
+          const opponentChoice = objectName;
+
+          const whoWon = decideOutcome(challengerChoice, opponentChoice);
 
           if (whoWon === "p1") {
             bumpRecord(challengerId, "win");
-            bumpRecord(userId, "lose");
+            bumpRecord(opponentId, "lose");
           } else if (whoWon === "p2") {
             bumpRecord(challengerId, "lose");
-            bumpRecord(userId, "win");
+            bumpRecord(opponentId, "win");
           } else {
             bumpRecord(challengerId, "tie");
-            bumpRecord(userId, "tie");
+            bumpRecord(opponentId, "tie");
           }
 
           const resultStr = getResult(
             { id: challengerId, objectName: challengerChoice },
-            { id: userId, objectName }
+            { id: opponentId, objectName: opponentChoice }
           );
+
           delete activeGames[gameId];
           const endpoint = `webhooks/${process.env.APP_ID}/${req.body.token}/messages/${req.body.message.id}`;
-          await res.send({
+
+          const cRec = winLoss[challengerId] ?? { wins: 0, losses: 0, ties: 0 };
+          const oRec = winLoss[opponentId] ?? { wins: 0, losses: 0, ties: 0 };
+
+          const recordsLine =
+            `\n\n**Records**\n` +
+            `• <@${challengerId}> — ${cRec.wins}-${cRec.losses}-${cRec.ties}\n` +
+            `• <@${opponentId}> — ${oRec.wins}-${oRec.losses}-${oRec.ties}`;
+
+          try {
+            await res.send({
+              type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+              data: {
+                flags: InteractionResponseFlags.IS_COMPONENTS_V2,
+                components: [
+                  {
+                    type: MessageComponentTypes.TEXT_DISPLAY,
+                    content: `${resultStr}${recordsLine}`,
+                  },
+                ],
+              },
+            });
+
+            await DiscordRequest(endpoint, {
+              method: "PATCH",
+              body: {
+                components: [
+                  {
+                    type: MessageComponentTypes.TEXT_DISPLAY,
+                    content: "Nice choice " + getRandomEmoji(),
+                  },
+                ],
+              },
+            });
+          } catch (err) {
+            console.error("Error sending message:", err);
+          }
+        }
+      }
+
+      // BLACKJACK BUTTONS (yours)
+      if (
+        componentId.startsWith("bj_hit_") ||
+        componentId.startsWith("bj_stand_")
+      ) {
+        const clickerId = req.body.member?.user?.id ?? req.body.user?.id;
+        const userIdFromId = componentId.split("_").at(-1);
+
+        if (userIdFromId !== clickerId) {
+          return res.send({
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: resultStr },
-          });
-          await DiscordRequest(endpoint, {
-            method: "PATCH",
-            body: {
+            data: {
+              flags:
+                InteractionResponseFlags.EPHEMERAL |
+                InteractionResponseFlags.IS_COMPONENTS_V2,
               components: [
                 {
                   type: MessageComponentTypes.TEXT_DISPLAY,
-                  content: "Nice choice " + getRandomEmoji(),
+                  content: "This isn't your blackjack game.",
+                },
+              ],
+            },
+          });
+        }
+
+        const game = blackjackGames[clickerId];
+        if (!game) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags:
+                InteractionResponseFlags.EPHEMERAL |
+                InteractionResponseFlags.IS_COMPONENTS_V2,
+              components: [
+                {
+                  type: MessageComponentTypes.TEXT_DISPLAY,
+                  content:
+                    "You don't have an active blackjack game. Use /blackjack to start one.",
+                },
+              ],
+            },
+          });
+        }
+
+        let message = "🃏 **Blackjack**\n";
+
+        if (componentId.startsWith("bj_hit_")) {
+          game.playerHand.push(drawCard(game));
+
+          const playerTotal = getHandValue(game.playerHand);
+          const dealerShown = formatHand(game.dealerHand, true);
+          const playerHandStr = formatHand(game.playerHand);
+
+          if (playerTotal > 21) {
+            const dealerTotal = getHandValue(game.dealerHand);
+            const dealerHandStr = formatHand(game.dealerHand);
+
+            message +=
+              `Dealer: ${dealerHandStr} (Total: ${dealerTotal})\n` +
+              `You: ${playerHandStr} (Total: ${playerTotal})\n\n` +
+              `💥 You busted! Dealer wins.`;
+
+            delete blackjackGames[clickerId];
+
+            return res.send({
+              type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+              data: {
+                flags:
+                  InteractionResponseFlags.EPHEMERAL |
+                  InteractionResponseFlags.IS_COMPONENTS_V2,
+                components: [
+                  {
+                    type: MessageComponentTypes.TEXT_DISPLAY,
+                    content: message,
+                  },
+                ],
+              },
+            });
+          }
+
+          message +=
+            `Dealer: ${dealerShown}\n` +
+            `You: ${playerHandStr} (Total: ${playerTotal})\n\n` +
+            `Hit or Stand?`;
+
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags:
+                InteractionResponseFlags.EPHEMERAL |
+                InteractionResponseFlags.IS_COMPONENTS_V2,
+              components: [
+                {
+                  type: MessageComponentTypes.TEXT_DISPLAY,
+                  content: message,
+                },
+                {
+                  type: MessageComponentTypes.ACTION_ROW,
+                  components: [
+                    {
+                      type: MessageComponentTypes.BUTTON,
+                      custom_id: `bj_hit_${clickerId}`,
+                      label: "Hit",
+                      style: ButtonStyleTypes.PRIMARY,
+                    },
+                    {
+                      type: MessageComponentTypes.BUTTON,
+                      custom_id: `bj_stand_${clickerId}`,
+                      label: "Stand",
+                      style: ButtonStyleTypes.SECONDARY,
+                    },
+                  ],
+                },
+              ],
+            },
+          });
+        }
+
+        if (componentId.startsWith("bj_stand_")) {
+          while (getHandValue(game.dealerHand) < 17) {
+            game.dealerHand.push(drawCard(game));
+          }
+
+          const playerTotal = getHandValue(game.playerHand);
+          const dealerTotal = getHandValue(game.dealerHand);
+          const playerHandStr = formatHand(game.playerHand);
+          const dealerHandStr = formatHand(game.dealerHand);
+
+          let outcome;
+          if (dealerTotal > 21 || playerTotal > dealerTotal) {
+            outcome = "You win!";
+          } else if (dealerTotal === playerTotal) {
+            outcome = "It's a push.";
+          } else {
+            outcome = "Dealer wins.";
+          }
+
+          message +=
+            `Dealer: ${dealerHandStr} (Total: ${dealerTotal})\n` +
+            `You: ${playerHandStr} (Total: ${playerTotal})\n\n` +
+            outcome;
+
+          delete blackjackGames[clickerId];
+
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags:
+                InteractionResponseFlags.EPHEMERAL |
+                InteractionResponseFlags.IS_COMPONENTS_V2,
+              components: [
+                {
+                  type: MessageComponentTypes.TEXT_DISPLAY,
+                  content: message,
                 },
               ],
             },
@@ -704,7 +1202,210 @@ app.post(
         }
       }
 
-      // GUESS SONG SELECT
+      // TTT ACCEPT (yours)
+      if (componentId.startsWith("ttt_accept_")) {
+        const gameId = componentId.replace("ttt_accept_", "");
+        const game = tttGames[gameId];
+        const clickerId = req.body.member?.user?.id ?? req.body.user?.id;
+
+        if (!game) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags:
+                InteractionResponseFlags.EPHEMERAL |
+                InteractionResponseFlags.IS_COMPONENTS_V2,
+              components: [
+                {
+                  type: MessageComponentTypes.TEXT_DISPLAY,
+                  content: "This Tic Tac Toe game could not be found.",
+                },
+              ],
+            },
+          });
+        }
+
+        if (clickerId === game.xPlayerId) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags:
+                InteractionResponseFlags.EPHEMERAL |
+                InteractionResponseFlags.IS_COMPONENTS_V2,
+              components: [
+                {
+                  type: MessageComponentTypes.TEXT_DISPLAY,
+                  content: "You can't accept your own Tic Tac Toe challenge.",
+                },
+              ],
+            },
+          });
+        }
+
+        if (game.oPlayerId && game.oPlayerId !== clickerId) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags:
+                InteractionResponseFlags.EPHEMERAL |
+                InteractionResponseFlags.IS_COMPONENTS_V2,
+              components: [
+                {
+                  type: MessageComponentTypes.TEXT_DISPLAY,
+                  content: "This Tic Tac Toe game already has two players.",
+                },
+              ],
+            },
+          });
+        }
+
+        game.oPlayerId = clickerId;
+
+        return res.send({
+          type: InteractionResponseType.UPDATE_MESSAGE,
+          data: {
+            content: makeTttText(game),
+            components: makeTttComponents(gameId, game),
+          },
+        });
+      }
+
+      // TTT MOVE (yours)
+      if (componentId.startsWith("ttt_move_")) {
+        const clickerId = req.body.member?.user?.id ?? req.body.user?.id;
+        const parts = componentId.split("_");
+        const gameId = parts[2];
+        const cellIndex = Number(parts[3]);
+
+        const game = tttGames[gameId];
+
+        if (!game) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags:
+                InteractionResponseFlags.EPHEMERAL |
+                InteractionResponseFlags.IS_COMPONENTS_V2,
+              components: [
+                {
+                  type: MessageComponentTypes.TEXT_DISPLAY,
+                  content: "This Tic Tac Toe game no longer exists.",
+                },
+              ],
+            },
+          });
+        }
+
+        if (clickerId !== game.xPlayerId && clickerId !== game.oPlayerId) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags:
+                InteractionResponseFlags.EPHEMERAL |
+                InteractionResponseFlags.IS_COMPONENTS_V2,
+              components: [
+                {
+                  type: MessageComponentTypes.TEXT_DISPLAY,
+                  content: "You're not a player in this Tic Tac Toe game.",
+                },
+              ],
+            },
+          });
+        }
+
+        if (game.isFinished) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags:
+                InteractionResponseFlags.EPHEMERAL |
+                InteractionResponseFlags.IS_COMPONENTS_V2,
+              components: [
+                {
+                  type: MessageComponentTypes.TEXT_DISPLAY,
+                  content: "This Tic Tac Toe game is already finished.",
+                },
+              ],
+            },
+          });
+        }
+
+        const marker = clickerId === game.xPlayerId ? "X" : "O";
+
+        if (marker !== game.currentTurn) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags:
+                InteractionResponseFlags.EPHEMERAL |
+                InteractionResponseFlags.IS_COMPONENTS_V2,
+              components: [
+                {
+                  type: MessageComponentTypes.TEXT_DISPLAY,
+                  content: "It's not your turn.",
+                },
+              ],
+            },
+          });
+        }
+
+        if (Number.isNaN(cellIndex) || cellIndex < 0 || cellIndex > 8) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags:
+                InteractionResponseFlags.EPHEMERAL |
+                InteractionResponseFlags.IS_COMPONENTS_V2,
+              components: [
+                {
+                  type: MessageComponentTypes.TEXT_DISPLAY,
+                  content: "Invalid move.",
+                },
+              ],
+            },
+          });
+        }
+
+        if (game.board[cellIndex] !== null) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags:
+                InteractionResponseFlags.EPHEMERAL |
+                InteractionResponseFlags.IS_COMPONENTS_V2,
+              components: [
+                {
+                  type: MessageComponentTypes.TEXT_DISPLAY,
+                  content: "That spot is already taken.",
+                },
+              ],
+            },
+          });
+        }
+
+        game.board[cellIndex] = marker;
+
+        const win = checkTttWinner(game.board);
+        if (win) {
+          game.isFinished = true;
+          game.winner = win;
+        } else if (isBoardFull(game.board)) {
+          game.isFinished = true;
+          game.isDraw = true;
+        } else {
+          game.currentTurn = game.currentTurn === "X" ? "O" : "X";
+        }
+
+        return res.send({
+          type: InteractionResponseType.UPDATE_MESSAGE,
+          data: {
+            content: makeTttText(game),
+            components: makeTttComponents(gameId, game),
+          },
+        });
+      }
+
+      // GUESS SONG SELECT (main)
       if (componentId.startsWith("guesssong_select_")) {
         const gameId = componentId.replace("guesssong_select_", "");
         const selectedIndex = Number(data.values[0]);
@@ -729,7 +1430,7 @@ app.post(
         });
       }
 
-      // HIGHER LOWER BUTTONS
+      // HIGHER LOWER BUTTONS (main)
       if (componentId.startsWith("hilo_")) {
         const userId = req.body.member?.user?.id ?? req.body.user?.id;
         const game = activeHigherLowerGames[userId];
@@ -800,10 +1501,13 @@ app.post(
           });
         }
       }
+
       return;
     }
 
+    // -----------------------------------------
     // MODAL SUBMITS (Hangman Solve)
+    // -----------------------------------------
     if (type === InteractionType.MODAL_SUBMIT) {
       const modalId = data.custom_id;
       if (modalId.startsWith("hangman_solve_modal_")) {

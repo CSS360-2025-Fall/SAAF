@@ -40,12 +40,22 @@ const CHALLENGE_COMMAND = {
   contexts: [0, 2],
 };
 
+const BLACKJACK_COMMAND = {
+  name: "blackjack",
+  description: "Play a simple game of Blackjack against the dealer.",
+  type: 1, // CHAT_INPUT
+  integration_types: [0, 1],
+  contexts: [0, 1, 2], 
+};
+
+
+// --- JOKE COMMAND DEFINITION ADDED HERE ---
 const JOKE_COMMAND = {
   name: "joke",
   description: "Sends a random joke or a specific one.",
   options: [
     {
-      type: 4,
+      type: 4, // INTEGER
       name: "number",
       description: "The number of the joke you want (1-3)",
       required: false,
@@ -54,10 +64,23 @@ const JOKE_COMMAND = {
     },
   ],
   type: 1,
-  integration_types: [0, 1],
-  contexts: [0, 1, 2],
+  integration_types: [0, 1], // Can be used in guilds and DMs
+  contexts: [0, 1, 2], // Can be used in guilds, DMs, and other contexts
+};
+// --- END OF ADDED CODE ---
+
+const RULES_COMMAND = {
+    name: 'rules',
+    description: 'Show the bot theme, rules, and example commands',
+    type: 1,
+    integration_types: [0, 1],
+    contexts: [0, 1, 2],
 };
 
+const TICTACTOE_COMMAND = {
+  name: "tictactoe",
+  description: "Start a Tic Tac Toe challenge that anyone can accept.",
+  type: 1, // CHAT_INPUT
 const COINFLIP_COMMAND = {
   name: "coinflip",
   description: "Flip a coin and get heads or tails!",
@@ -144,6 +167,8 @@ export const ALL_COMMANDS = [
   HANGMAN_COMMAND,
   HIGHER_LOWER_COMMAND,
   ZODIAC_COMMAND,
+  BLACKJACK_COMMAND, 
+  TICTACTOE_COMMAND
 ];
 
 InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
