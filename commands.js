@@ -81,6 +81,9 @@ const TICTACTOE_COMMAND = {
   name: "tictactoe",
   description: "Start a Tic Tac Toe challenge that anyone can accept.",
   type: 1, // CHAT_INPUT
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+}
 const COINFLIP_COMMAND = {
   name: "coinflip",
   description: "Flip a coin and get heads or tails!",
@@ -89,13 +92,6 @@ const COINFLIP_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-const RULES_COMMAND = {
-  name: "rules",
-  description: "Show the bot theme, rules, and example commands",
-  type: 1,
-  integration_types: [0, 1],
-  contexts: [0, 1, 2],
-};
 
 const HIGHER_LOWER_COMMAND = {
   name: "higherlower",
