@@ -1,24 +1,20 @@
 import "dotenv/config";
 import { getRPSChoices } from "./game.js";
 import { capitalize, InstallGlobalCommands } from "./utils.js";
-import process from "node:process";
 
 // Get the game choices from game.js
 function createCommandChoices() {
   const choices = getRPSChoices();
   const commandChoices = [];
-
   for (let choice of choices) {
     commandChoices.push({
       name: capitalize(choice),
       value: choice.toLowerCase(),
     });
   }
-
   return commandChoices;
 }
 
-// Simple test command (Syntax corrected)
 const TEST_COMMAND = {
   name: "test",
   description: "Basic command",
@@ -27,7 +23,6 @@ const TEST_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-// Command containing options (Syntax corrected)
 const CHALLENGE_COMMAND = {
   name: "challenge",
   description: "Challenge to a match of rock paper scissors",
@@ -43,6 +38,14 @@ const CHALLENGE_COMMAND = {
   type: 1,
   integration_types: [0, 1],
   contexts: [0, 2],
+};
+
+const BLACKJACK_COMMAND = {
+  name: "blackjack",
+  description: "Play a simple game of Blackjack against the dealer.",
+  type: 1, // CHAT_INPUT
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
 };
 
 // --- JOKE COMMAND DEFINITION ADDED HERE ---
@@ -65,12 +68,43 @@ const JOKE_COMMAND = {
 };
 // --- END OF ADDED CODE ---
 
+const RULES_COMMAND = {
+  name: "rules",
+  description: "Show the bot theme, rules, and example commands",
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
+const TICTACTOE_COMMAND = {
+  name: "tictactoe",
+  description: "Start a Tic Tac Toe challenge that anyone can accept.",
+  type: 1, // CHAT_INPUT
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+const COINFLIP_COMMAND = {
+  name: "coinflip",
+  description: "Flip a coin and get heads or tails!",
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
+const HIGHER_LOWER_COMMAND = {
+  name: "higherlower",
+  description: "Play a game of Higher or Lower!",
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
 const HANGMAN_COMMAND = {
   name: "hangman",
   description: "Play hangman with a group of people.",
   options: [
     {
-      type: 4, // INTEGER
+      type: 4,
       name: "number",
       description: "The letter count you want to guess (min 5, max 14).",
       required: false,
@@ -79,8 +113,8 @@ const HANGMAN_COMMAND = {
     },
   ],
   type: 1,
-  integration_types: [0, 1], // Can be used in guilds and DMs
-  contexts: [0, 1, 2], // Can be used in guilds, DMs, and other contexts
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
 };
 
 const TYPERACE_COMMAND = {
@@ -95,7 +129,8 @@ const TYPERACE_COMMAND = {
 
 const SUBMIT_COMMAND = {
   name: "submit",
-  description: "Submit your typed passage for the active race (or provide game id).",
+  description:
+    "Submit your typed passage for the active race (or provide game id).",
   options: [
     {
       type: 3, // STRING
@@ -115,9 +150,35 @@ const SUBMIT_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-const RULES_COMMAND = {
-  name: "rules",
-  description: "Show the bot theme, rules, and example commands",
+const ZODIAC_COMMAND = {
+  name: "zodiac",
+  description: "Enter your birth month and day to get a horoscope fact.",
+  options: [
+    {
+      type: 4,
+      name: "month",
+      description: "Birth Month (1-12)",
+      required: true,
+      min_value: 1,
+      max_value: 12,
+    },
+    {
+      type: 4,
+      name: "day",
+      description: "Birth Day (1-31)",
+      required: true,
+      min_value: 1,
+      max_value: 31,
+    },
+  ],
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
+const GUESS_SONG_COMMAND = {
+  name: "guesssong",
+  description: "Play guess the song from emojis!",
   type: 1,
   integration_types: [0, 1],
   contexts: [0, 1, 2],
@@ -128,8 +189,15 @@ export const ALL_COMMANDS = [
   CHALLENGE_COMMAND,
   JOKE_COMMAND,
   RULES_COMMAND,
+  COINFLIP_COMMAND,
+  GUESS_SONG_COMMAND,
   HANGMAN_COMMAND,
   TYPERACE_COMMAND,
   SUBMIT_COMMAND,
+  HIGHER_LOWER_COMMAND,
+  ZODIAC_COMMAND,
+  BLACKJACK_COMMAND,
+  TICTACTOE_COMMAND,
 ];
+
 InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
