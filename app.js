@@ -1136,23 +1136,14 @@ app.post(
           }
           delete activeHangmanGames[gameId];
         } else {
-          // incorrect: record as a wrong guess and reply ephemerally
+          // incorrect: record as a wrong guess. Respond ONCE depending on outcome:
+          // - if this guess causes game over, update the original message (public)
+          // - otherwise reply ephemerally to the submitter
           game.wrong++;
           game.wrongLetters.push(guess.toUpperCase());
-          try {
-            await res.send({
-              type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-              data: {
-                flags: InteractionResponseFlags.EPHEMERAL,
-                content: `Incorrect solve attempt: **${guess}** — (${game.wrong}/${game.maxWrong} wrong)`,
-              },
-            });
-          } catch (err) {
-            console.error("hangman modal incorrect reply error", err);
-          }
 
-          // if too many wrongs, end the game and update original message if possible
           if (game.wrong >= game.maxWrong) {
+            // game over: update original message if possible, otherwise send a public message
             try {
               if (req.body.message && req.body.message.id) {
                 await res.send({
@@ -1184,6 +1175,19 @@ app.post(
               console.error("hangman modal endgame update error", err);
             }
             delete activeHangmanGames[gameId];
+          } else {
+            // not game over: send an ephemeral notice about the incorrect attempt
+            try {
+              await res.send({
+                type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+                data: {
+                  flags: InteractionResponseFlags.EPHEMERAL,
+                  content: `Incorrect solve attempt: **${guess}** — (${game.wrong}/${game.maxWrong} wrong)`,
+                },
+              });
+            } catch (err) {
+              console.error("hangman modal incorrect reply error", err);
+            }
           }
         }
 
@@ -1202,6 +1206,7 @@ app.post(
         const rest = componentId.substring("hangman_guess_".length);
         const gameId = rest.replace(/_\d+$/, "");
         const game = activeHangmanGames[gameId];
+
         if (!game)
           return res.send({
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -1221,11 +1226,13 @@ app.post(
             },
           });
         }
+
         game.guessed.push(letter);
         if (!game.word.includes(letter)) {
           game.wrongLetters.push(letter.toUpperCase());
           game.wrong++;
         }
+
         const masked = maskWord(game.word, game.guessed);
 
         const letters = "abcdefghijklmnopqrstuvwxyz".split("");
@@ -1249,14 +1256,24 @@ app.post(
         if (game.wrong >= game.maxWrong || !masked.includes("_"))
           delete activeHangmanGames[gameId];
 
-        return res.send({
+        const responsePayload = {
           type: InteractionResponseType.UPDATE_MESSAGE,
           data: {
-            content: content,
+            // ✅ Use Components V2 format with TEXT_DISPLAY
+            flags: InteractionResponseFlags.IS_COMPONENTS_V2,
             components:
               game.wrong >= game.maxWrong || !masked.includes("_")
-                ? []
+                ? [
+                    {
+                      type: MessageComponentTypes.TEXT_DISPLAY,
+                      content: content,
+                    },
+                  ]
                 : [
+                    {
+                      type: MessageComponentTypes.TEXT_DISPLAY,
+                      content: content,
+                    },
                     ...(first.length
                       ? [
                           {
@@ -1300,7 +1317,15 @@ app.post(
                     },
                   ],
           },
-        });
+        };
+
+        try {
+          await res.send(responsePayload);
+          return;
+        } catch (err) {
+          console.error("[hangman_guess] res.send error:", err);
+          return;
+        }
       }
 
       // HANGMAN SOLVE BUTTON (main)
