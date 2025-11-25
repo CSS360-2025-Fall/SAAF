@@ -1100,6 +1100,7 @@ app.post(
           // correct: try to update the original message if available
           try {
             if (req.body.message && req.body.message.id) {
+              console.log(game.wrongLetters);
               await res.send({
                 type: InteractionResponseType.UPDATE_MESSAGE,
                 data: {
@@ -1141,6 +1142,7 @@ app.post(
           // - otherwise reply ephemerally to the submitter
           game.wrong++;
           game.wrongLetters.push(guess.toUpperCase());
+          console.log("Added wrong: " + game.wrongLetters);
 
           if (game.wrong >= game.maxWrong) {
             // game over: update original message if possible, otherwise send a public message
@@ -1232,6 +1234,7 @@ app.post(
           game.wrongLetters.push(letter.toUpperCase());
           game.wrong++;
         }
+        console.log("Adding letter? " + game.wrongLetters);
 
         const masked = maskWord(game.word, game.guessed);
 
@@ -1251,7 +1254,13 @@ app.post(
             ? `☠️ Game over — the word was **${game.word}**`
             : !masked.includes("_")
             ? `🎉 Solved! The word was **${game.word}**`
-            : `Hangman — Word: \`${masked}\`  (wrong: ${game.wrong}/${game.maxWrong})`;
+            : `Hangman — Word: \`${masked}\` (wrong: ${game.wrong}/${
+                game.maxWrong
+              }${
+                game.wrongLetters.length
+                  ? " — wrong letters/guesses: " + game.wrongLetters.join(", ")
+                  : ""
+              })`;
 
         if (game.wrong >= game.maxWrong || !masked.includes("_"))
           delete activeHangmanGames[gameId];

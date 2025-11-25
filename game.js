@@ -1,4 +1,6 @@
-import { capitalize } from './utils.js';
+import { capitalize } from "./utils.js";
+import fs from "fs";
+import path from "path";
 
 // --- ROCK PAPER SCISSORS LOGIC ---
 export function getResult(p1, p2) {
@@ -26,53 +28,53 @@ export function getResult(p1, p2) {
 
 function formatResult(result) {
   const { win, lose, verb } = result;
-  return verb === 'tie'
+  return verb === "tie"
     ? `<@${win.id}> and <@${lose.id}> draw with **${win.objectName}**`
     : `<@${win.id}>'s **${win.objectName}** ${verb} <@${lose.id}>'s **${lose.objectName}**`;
 }
 
 const RPSChoices = {
   rock: {
-    description: 'sedimentary, igneous, or perhaps even metamorphic',
-    virus: 'outwaits',
-    computer: 'smashes',
-    scissors: 'crushes',
+    description: "sedimentary, igneous, or perhaps even metamorphic",
+    virus: "outwaits",
+    computer: "smashes",
+    scissors: "crushes",
   },
   cowboy: {
-    description: 'yeehaw~',
-    scissors: 'puts away',
-    wumpus: 'lassos',
-    rock: 'steel-toe kicks',
+    description: "yeehaw~",
+    scissors: "puts away",
+    wumpus: "lassos",
+    rock: "steel-toe kicks",
   },
   scissors: {
-    description: 'careful ! sharp ! edges !!',
-    paper: 'cuts',
-    computer: 'cuts cord of',
-    virus: 'cuts DNA of',
+    description: "careful ! sharp ! edges !!",
+    paper: "cuts",
+    computer: "cuts cord of",
+    virus: "cuts DNA of",
   },
   virus: {
-    description: 'genetic mutation, malware, or something inbetween',
-    cowboy: 'infects',
-    computer: 'corrupts',
-    wumpus: 'infects',
+    description: "genetic mutation, malware, or something inbetween",
+    cowboy: "infects",
+    computer: "corrupts",
+    wumpus: "infects",
   },
   computer: {
-    description: 'beep boop beep bzzrrhggggg',
-    cowboy: 'overwhelms',
-    paper: 'uninstalls firmware for',
-    wumpus: 'deletes assets for',
+    description: "beep boop beep bzzrrhggggg",
+    cowboy: "overwhelms",
+    paper: "uninstalls firmware for",
+    wumpus: "deletes assets for",
   },
   wumpus: {
-    description: 'the purple Discord fella',
-    paper: 'draws picture on',
-    rock: 'paints cute face on',
-    scissors: 'admires own reflection in',
+    description: "the purple Discord fella",
+    paper: "draws picture on",
+    rock: "paints cute face on",
+    scissors: "admires own reflection in",
   },
   paper: {
-    description: 'versatile and iconic',
-    virus: 'ignores',
-    cowboy: 'gives papercut to',
-    rock: 'covers',
+    description: "versatile and iconic",
+    virus: "ignores",
+    cowboy: "gives papercut to",
+    rock: "covers",
   },
 };
 
@@ -87,7 +89,7 @@ export function getShuffledOptions() {
     options.push({
       label: capitalize(c),
       value: c.toLowerCase(),
-      description: RPSChoices[c]['description'],
+      description: RPSChoices[c]["description"],
     });
   }
   return options.sort(() => Math.random() - 0.5);
@@ -266,28 +268,51 @@ export function getZodiacSign(month, day) {
   return null;
 }
 
-// --- HANGMAN LOGIC ---
-const words = [
-  "javascript",
-  "discord",
-  "programming",
-  "developer",
-  "computer",
-  "internet",
-  "database",
-  "algorithm",
-  "variable",
-  "function",
-];
+const WORDS_CSV = path.join(
+  new URL(import.meta.url).pathname,
+  "..",
+  "hangman",
+  "wordsbylength.csv"
+);
 
-export function pickRandomWord() {
-  return words[Math.floor(Math.random() * words.length)];
+function parseCSV(csv) {
+  const lines = csv.split(/\r?\n/).filter(Boolean);
+  const map = new Map();
+  for (const line of lines) {
+    // each line: length, word1, word2, ...
+    const parts = line.split(",").map((s) => s.trim());
+    const len = Number(parts[0]);
+    const words = parts.slice(1).map((w) => w.toLowerCase());
+    if (!Number.isNaN(len)) map.set(len, words);
+  }
+  console.log(map);
+  return map;
 }
 
-export function pickWordByLength(length) {
-  const filtered = words.filter((w) => w.length === length);
-  if (filtered.length === 0) return null;
-  return filtered[Math.floor(Math.random() * filtered.length)];
+let wordsByLength = new Map();
+try {
+  const csv = fs.readFileSync(WORDS_CSV, "utf8");
+  wordsByLength = parseCSV(csv);
+} catch (err) {
+  // if loading fails, keep map empty; callers should handle missing words
+  console.error("hangman: failed to load wordsbylength.csv", err.message);
+}
+
+export function availableLengths() {
+  return Array.from(wordsByLength.keys()).sort((a, b) => a - b);
+}
+
+export function pickRandomWord() {
+  const lengths = availableLengths();
+  if (lengths.length === 0) return null;
+  const len = lengths[Math.floor(Math.random() * lengths.length)];
+  return pickWordByLength(len);
+}
+
+export function pickWordByLength(len) {
+  const list = wordsByLength.get(Number(len)) || [];
+  if (list.length === 0) return null;
+  return list[Math.floor(Math.random() * list.length)];
 }
 
 export function maskWord(word, guessedLetters) {
@@ -295,4 +320,8 @@ export function maskWord(word, guessedLetters) {
     .split("")
     .map((char) => (guessedLetters.includes(char) ? char : "_"))
     .join(" ");
+}
+
+export function wordContainsLetter(word, letter) {
+  return word.includes(String(letter).toLowerCase());
 }

@@ -1,29 +1,38 @@
-import fs from 'fs';
-import path from 'path';
+import fs from "fs";
+import path from "path";
 
 // Load wordsbylength.csv into a map: length -> [words]
-const WORDS_CSV = path.join(new URL(import.meta.url).pathname, '..', 'wordsbylength.csv');
+const WORDS_CSV = path.join(
+  new URL(import.meta.url).pathname,
+  ".",
+  "hangman",
+  "wordsbylength.csv"
+);
+console.log("WORDS_CSV :>> ", WORDS_CSV);
 
 function parseCSV(csv) {
   const lines = csv.split(/\r?\n/).filter(Boolean);
   const map = new Map();
   for (const line of lines) {
     // each line: length, word1, word2, ...
-    const parts = line.split(',').map((s) => s.trim());
+    const parts = line.split(",").map((s) => s.trim());
     const len = Number(parts[0]);
     const words = parts.slice(1).map((w) => w.toLowerCase());
     if (!Number.isNaN(len)) map.set(len, words);
   }
+  console.log(map);
   return map;
 }
 
 let wordsByLength = new Map();
 try {
-  const csv = fs.readFileSync(WORDS_CSV, 'utf8');
+  const csv = fs.readFileSync("./hangman/wordsbylength.csv", "utf8");
   wordsByLength = parseCSV(csv);
+  console.log(wordsByLength);
+  // console.log(wordsByLength);
 } catch (err) {
   // if loading fails, keep map empty; callers should handle missing words
-  console.error('hangman: failed to load wordsbylength.csv', err.message);
+  console.error("hangman: failed to load wordsbylength.csv", err.message);
 }
 
 export function availableLengths() {
@@ -45,12 +54,12 @@ export function pickRandomWord() {
 
 export function maskWord(word, guessedLetters = []) {
   const set = new Set(guessedLetters.map((c) => String(c).toLowerCase()));
-  let revealed = '';
+  let revealed = "";
   for (const ch of word) {
-    if (ch === ' ' || ch === '-' || set.has(ch)) revealed += ch;
-    else revealed += '_';
+    if (ch === " " || ch === "-" || set.has(ch)) revealed += ch;
+    else revealed += "_";
   }
-  return revealed.split('').join(' ');
+  return revealed.split("").join(" ");
 }
 
 export function wordContainsLetter(word, letter) {
