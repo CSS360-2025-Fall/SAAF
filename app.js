@@ -962,10 +962,13 @@ app.post(
           });
         }
 
+        const randomFact =
+          signData.facts[Math.floor(Math.random() * signData.facts.length)];
+
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
           data: {
-            content: `🌌 **Astrology Fact** 🌌\n\n**Sign:** ${signData.sign}\n**Date:** ${month}/${day}\n\n✨ *${signData.fact}*`,
+            content: `🌌 **Astrology Fact** 🌌\n\n**Sign:** ${signData.sign}\n**Date:** ${month}/${day}\n\n✨ *${randomFact}*`,
           },
         });
       }
