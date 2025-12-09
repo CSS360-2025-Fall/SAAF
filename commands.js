@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { getRPSChoices } from "./game.js";
 import { capitalize, InstallGlobalCommands } from "./utils.js";
+import process from "node:process";
 
 // Get the game choices from game.js
 function createCommandChoices() {
@@ -48,7 +49,6 @@ const BLACKJACK_COMMAND = {
   contexts: [0, 1, 2],
 };
 
-// --- JOKE COMMAND DEFINITION ADDED HERE ---
 const JOKE_COMMAND = {
   name: "joke",
   description: "Sends a random joke or a specific one.",
@@ -63,10 +63,9 @@ const JOKE_COMMAND = {
     },
   ],
   type: 1,
-  integration_types: [0, 1], // Can be used in guilds and DMs
-  contexts: [0, 1, 2], // Can be used in guilds, DMs, and other contexts
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
 };
-// --- END OF ADDED CODE ---
 
 const RULES_COMMAND = {
   name: "rules",
@@ -79,10 +78,11 @@ const RULES_COMMAND = {
 const TICTACTOE_COMMAND = {
   name: "tictactoe",
   description: "Start a Tic Tac Toe challenge that anyone can accept.",
-  type: 1, // CHAT_INPUT
+  type: 1,
   integration_types: [0, 1],
   contexts: [0, 1, 2],
 };
+
 const COINFLIP_COMMAND = {
   name: "coinflip",
   description: "Flip a coin and get heads or tails!",
@@ -178,7 +178,8 @@ const ZODIAC_COMMAND = {
 
 const GUESS_SONG_COMMAND = {
   name: "guesssong",
-  description: "Play Guess the Song! Choose a genre and guess the song from emojis.",
+  description:
+    "Play Guess the Song! Choose a genre and guess the song from emojis.",
   type: 1,
   integration_types: [0, 1],
   contexts: [0, 1, 2],
@@ -217,4 +218,8 @@ export const ALL_COMMANDS = [
   USAGES_COMMAND,
 ];
 
-InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
+// FIX: Only register commands if this file is run directly (via npm run register)
+// This prevents Rate Limits (429) when app.js imports this file.
+if (process.argv[1].endsWith("commands.js")) {
+  InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
+}
