@@ -178,7 +178,7 @@ const ZODIAC_COMMAND = {
 
 const GUESS_SONG_COMMAND = {
   name: "guesssong",
-  description: "Play guess the song from emojis!",
+  description: "Play Guess the Song! Choose a genre and guess the song from emojis.",
   type: 1,
   integration_types: [0, 1],
   contexts: [0, 1, 2],

@@ -58,6 +58,18 @@ const BOT_THEME = {
   exampleCommands: [
     "/test - Test the bot's response",
     "/challenge <choice> - Start a Rock Paper Scissors game with a friend",
+    "/blackjack - Play a simple game of Blackjack against the dealer",
+    "/coinflip - Flip a coin and get heads or tails",
+    "/guesssong - Play 'Guess the Song' from emojis (choose a genre first)",
+    "/hangman - Play Hangman with your friends (guess the word by letters)",
+    "/typerace - Start a typing race; host begins the race, players submit typing",
+    "/submit - Submit your typed passage for an active typing race",
+    "/higherlower - Play Higher or Lower with a shuffled deck of cards",
+    "/zodiac - Enter your birth date to get a fun astrology fact",
+    "/tictactoe - Start a Tic Tac Toe challenge that anyone can accept",
+    "/joke - Get a random joke or pick a specific one by number",
+    "/usages - View your command usage statistics as a chart",
+    "/rules - Show the bot theme, rules, and example commands",
   ],
 };
 
@@ -73,18 +85,36 @@ const jokes = [
 // -------------------------
 // Guess the Song data (main)
 // -------------------------
-const songs = [
-  { title: "Baby - Justin Bieber", emojis: "👶💕🎶" },
-  { title: "Circus - Britney Spears", emojis: "🎪🤹‍♀️✨" },
-  { title: "Thriller - Michael Jackson", emojis: "🧛‍♂️🌕🧟‍♂️" },
-  { title: "Let It Go - Idina Menzel (from Frozen)", emojis: "❄️👸🎤" },
-  { title: "Rolling in the Deep - Adele", emojis: "🌊🎵💔" },
-  { title: "Umbrella - Rihanna", emojis: "☔👑🌧️" },
-];
+// Guess the Song — with genres
+const SONGS_BY_GENRE = {
+  rock: [
+    { title: "Bohemian Rhapsody - Queen", emojis: "🎤👑🎶" },
+    { title: "Stairway to Heaven - Led Zeppelin", emojis: "🎸🌌🕊️" },
+    { title: "Smells Like Teen Spirit - Nirvana", emojis: "🎸🌀🔥" },
+    { title: "Hotel California - Eagles", emojis: "🏨🌴🌅" },
+    { title: "Sweet Child O' Mine - Guns N' Roses", emojis: "🌹🎸👧" },
+  ],
+  pop: [
+    { title: "Bad Romance - Lady Gaga", emojis: "🧛‍♀️💋🔥" },
+    { title: "Shake It Off - Taylor Swift", emojis: "💃🎶✨" },
+    { title: "Blinding Lights - The Weeknd", emojis: "🌃🚗💡" },
+    { title: "Billie Jean - Michael Jackson", emojis: "🕺🎵🌙" },
+    { title: "Firework - Katy Perry", emojis: "🎆💥🌈" },
+  ],
+  hiphop: [
+    { title: "Sicko Mode - Travis Scott", emojis: "🌪️🔥🎧" },
+    { title: "God's Plan - Drake", emojis: "🙏💙🎵" },
+    { title: "Lose Yourself - Eminem", emojis: "🎤⚡🍝" },
+    { title: "Stronger - Kanye West", emojis: "💪🎹🎧" },
+    { title: "Empire State of Mind - Jay-Z & Alicia Keys", emojis: "🗽🌃🎶" },
+  ],
+};
 
-function getRandomSong() {
-  return songs[Math.floor(Math.random() * songs.length)];
+function getRandomSongFromGenre(genre) {
+  const list = SONGS_BY_GENRE[genre];
+  return list[Math.floor(Math.random() * list.length)];
 }
+
 
 const COMPUTER_ID = "RPS_COMPUTER";
 const COMPUTER_NAME = "Computer";
@@ -751,16 +781,15 @@ app.post(
           },
         });
       }
-
-      // GUESS THE SONG (main)
+1
+      // GUESS THE SONG WITH GENRES
       if (name === "guesssong") {
         const songGameCommand = ALL_COMMANDS.find(
           (cmd) => cmd.name === "guesssong"
         );
         if (songGameCommand) incrementCommandUsage(userId, songGameCommand);
-        const song = getRandomSong();
-        activeSongGames[id] = { userId, song };
 
+        // Step 1: Ask for genre
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
           data: {
@@ -768,18 +797,20 @@ app.post(
             components: [
               {
                 type: MessageComponentTypes.TEXT_DISPLAY,
-                content: `🎵 Guess the song from these emojis: ${song.emojis}`,
+                content: `🎵 **Guess the Song!**\nChoose a genre to get started.`,
               },
               {
                 type: MessageComponentTypes.ACTION_ROW,
                 components: [
                   {
                     type: MessageComponentTypes.STRING_SELECT,
-                    custom_id: `guesssong_select_${id}`,
-                    options: songs.map((s, i) => ({
-                      label: s.title,
-                      value: String(i),
-                    })),
+                    custom_id: `guesssong_genre_${id}`,
+                    placeholder: "Choose a genre",
+                    options: [
+                      { label: "Rock", value: "rock" },
+                      { label: "Pop", value: "pop" },
+                      { label: "Hip-Hop", value: "hiphop" },
+                    ],
                   },
                 ],
               },
@@ -787,6 +818,7 @@ app.post(
           },
         });
       }
+
 
       // HANGMAN (main)
       if (name === "hangman") {
@@ -1279,6 +1311,41 @@ app.post(
     // -----------------------------------------
     if (type === InteractionType.MESSAGE_COMPONENT) {
       const componentId = data.custom_id;
+      // When user chooses a genre for Guess the Song
+      if (data?.custom_id?.startsWith("guesssong_genre_")) {
+        const genre = data.values[0];
+        const gameId = data.custom_id.split("guesssong_genre_")[1];
+
+        const song = getRandomSongFromGenre(genre);
+        activeSongGames[gameId] = { userId, song };
+
+        return res.send({
+          type: InteractionResponseType.UPDATE_MESSAGE,
+          data: {
+            flags: InteractionResponseFlags.IS_COMPONENTS_V2,
+            components: [
+              {
+                type: MessageComponentTypes.TEXT_DISPLAY,
+                content: `🎵 **Guess the Song!**\nGenre: **${genre.toUpperCase()}**\n\nGuess from these emojis: ${song.emojis}`,
+              },
+              {
+                type: MessageComponentTypes.ACTION_ROW,
+                components: [
+                  {
+                    type: MessageComponentTypes.STRING_SELECT,
+                    custom_id: `guesssong_select_${gameId}`,
+                    placeholder: "Pick the song title",
+                    options: SONGS_BY_GENRE[genre].map((s, i) => ({
+                      label: s.title,
+                      value: String(i),
+                    })),
+                  },
+                ],
+              },
+            ],
+          },
+        });
+      }
 
       // HANGMAN GUESS (main)
       if (componentId.startsWith("hangman_guess_")) {
