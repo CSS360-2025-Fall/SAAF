@@ -285,7 +285,6 @@ function parseCSV(csv) {
     const words = parts.slice(1).map((w) => w.toLowerCase());
     if (!Number.isNaN(len)) map.set(len, words);
   }
-  console.log(map);
   return map;
 }
 
