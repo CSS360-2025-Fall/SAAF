@@ -22,6 +22,7 @@ import {
 } from "./game.js";
 import { incrementCommandUsage } from "./db/commandUsage.js";
 import { ALL_COMMANDS } from "./commands.js";
+import { generateUsageChart } from "./chartGenerator.js";
 
 const winLoss = Object.create(null);
 const app = express();
@@ -943,6 +944,7 @@ app.post(
       }
 
       // ZODIAC (main)
+      // ZODIAC (main)
       if (name === "zodiac") {
         const zodiacCommand = ALL_COMMANDS.find((cmd) => cmd.name === "zodiac");
         if (zodiacCommand) incrementCommandUsage(userId, zodiacCommand);
@@ -971,6 +973,78 @@ app.post(
             content: `🌌 **Astrology Fact** 🌌\n\n**Sign:** ${signData.sign}\n**Date:** ${month}/${day}\n\n✨ *${randomFact}*`,
           },
         });
+      }
+
+      // USAGES
+      if (name === "usages") {
+        const usagesCommand = ALL_COMMANDS.find((cmd) => cmd.name === "usages");
+        if (usagesCommand) incrementCommandUsage(userId, usagesCommand);
+
+        // Check if targeting a specific user
+        const userOption = options?.find((opt) => opt.name === "user");
+        const targetUserId = userOption ? userOption.value : userId;
+        const isTargetingSelf = targetUserId === userId;
+
+        // Send deferred response first (since chart generation can take a moment)
+        res.send({
+          type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+        });
+
+        // Generate and send chart asynchronously
+        (async () => {
+          try {
+            const chartBuffer = await generateUsageChart(targetUserId);
+
+            // Upload the chart as an attachment using followup webhook
+            const webhookUrl = `https://discord.com/api/v10/webhooks/${process.env.APP_ID}/${req.body.token}`;
+
+            const FormData = (await import("form-data")).default;
+            const axios = (await import("axios")).default;
+            const form = new FormData();
+
+            // Add payload_json first with all message data
+            const content = isTargetingSelf
+              ? "📊 **Your Command Usage Statistics** 📊"
+              : `📊 **Command Usage Statistics for <@${targetUserId}>** 📊`;
+
+            const payload = {
+              content: content,
+            };
+
+            form.append("payload_json", JSON.stringify(payload));
+
+            // Add the file
+            form.append("files[0]", chartBuffer, "usage-chart.png");
+
+            // Send using axios which handles FormData streams properly
+            const response = await axios.post(webhookUrl, form, {
+              headers: form.getHeaders(),
+            });
+
+            console.log("Successfully sent chart!");
+          } catch (err) {
+            console.error("Error generating usage chart:", err);
+            // Send error as followup
+            const webhookUrl = `https://discord.com/api/v10/webhooks/${process.env.APP_ID}/${req.body.token}`;
+            try {
+              await fetch(webhookUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  content:
+                    "Sorry, there was an error generating your usage chart.",
+                  flags: InteractionResponseFlags.EPHEMERAL,
+                }),
+              });
+            } catch (followupErr) {
+              console.error("Error sending followup error:", followupErr);
+            }
+          }
+        })();
+
+        return;
       }
 
       console.error(`unknown command: ${name}`);

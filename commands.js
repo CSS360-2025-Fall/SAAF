@@ -184,6 +184,22 @@ const GUESS_SONG_COMMAND = {
   contexts: [0, 1, 2],
 };
 
+const USAGES_COMMAND = {
+  name: "usages",
+  description: "View your command usage statistics as a chart",
+  options: [
+    {
+      type: 6, // USER type
+      name: "user",
+      description: "View usage stats for a specific user (optional)",
+      required: false,
+    },
+  ],
+  type: 1,
+  integration_types: [0, 1],
+  contexts: [0, 1, 2],
+};
+
 export const ALL_COMMANDS = [
   TEST_COMMAND,
   CHALLENGE_COMMAND,
@@ -198,6 +214,7 @@ export const ALL_COMMANDS = [
   ZODIAC_COMMAND,
   BLACKJACK_COMMAND,
   TICTACTOE_COMMAND,
+  USAGES_COMMAND,
 ];
 
 InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);
