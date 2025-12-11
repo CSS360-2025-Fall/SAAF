@@ -77,11 +77,24 @@ const RULES_COMMAND = {
 
 const TICTACTOE_COMMAND = {
   name: "tictactoe",
-  description: "Start a Tic Tac Toe challenge that anyone can accept.",
+  description: "Play Tic Tac Toe vs the bot or another player.",
   type: 1,
+  options: [
+    {
+      type: 3, // STRING
+      name: "mode",
+      description: "Choose who to play against",
+      required: false,
+      choices: [
+        { name: "Bot", value: "bot" },
+        { name: "Player", value: "player" },
+      ],
+    },
+  ],
   integration_types: [0, 1],
   contexts: [0, 1, 2],
 };
+
 
 const COINFLIP_COMMAND = {
   name: "coinflip",
