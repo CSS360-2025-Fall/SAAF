@@ -104,6 +104,9 @@ function getRandomSongFromGenre(genre) {
 const COMPUTER_ID = "RPS_COMPUTER";
 const COMPUTER_NAME = "Computer";
 
+const TTT_BOT_ID = "TTT_BOT";
+const TTT_BOT_NAME = "Bot";
+
 function randomRps() {
   const opts = ["rock", "paper", "scissors"];
   return opts[Math.floor(Math.random() * opts.length)];
@@ -202,7 +205,6 @@ function formatHand(hand, hideFirst = false) {
 
   return hand.map((c) => `${c.rank}${c.suit}`).join(" ");
 }
-
 // -------------------------
 // TicTacToe helpers
 // -------------------------
@@ -241,6 +243,39 @@ function cellToSymbol(cell) {
   return "▢";
 }
 
+// --- Bot helpers (outside makeTttText) ---
+function getRandomEmptyIndex(board) {
+  const empties = [];
+  for (let i = 0; i < board.length; i++) {
+    if (board[i] === null) empties.push(i);
+  }
+  if (!empties.length) return null;
+  const randomIndex = Math.floor(Math.random() * empties.length);
+  return empties[randomIndex];
+}
+
+function botMakeMove(game) {
+  if (!game || game.isFinished) return;
+
+  const idx = getRandomEmptyIndex(game.board);
+  if (idx === null) return;
+
+  game.board[idx] = "O";
+
+  const winner = checkTttWinner(game.board);
+  if (winner) {
+    game.winner = winner;
+    game.isFinished = true;
+    game.isDraw = false;
+  } else if (isBoardFull(game.board)) {
+    game.isDraw = true;
+    game.isFinished = true;
+  } else {
+    game.currentTurn = "X"; // back to human
+  }
+}
+
+// --- Rendering helpers ---
 function makeTttText(game) {
   const { xPlayerId, oPlayerId, board, currentTurn, winner, isDraw } = game;
 
@@ -256,14 +291,19 @@ function makeTttText(game) {
 
   let header = `**Tic Tac Toe**\nX = <@${xPlayerId}>`;
 
-  if (oPlayerId) header += `\nO = <@${oPlayerId}>`;
-  else header += `\nO = waiting for someone to accept...`;
+  if (oPlayerId === TTT_BOT_ID) {
+    header += `\nO = ${TTT_BOT_NAME}`;
+  } else if (oPlayerId) {
+    header += `\nO = <@${oPlayerId}>`;
+  } else {
+    header += `\nO = waiting for someone to accept...`;
+  }
 
   if (winner) {
     const winnerId = winner === "X" ? xPlayerId : oPlayerId;
-    header += `\n\n <@${winnerId}> (${winner}) wins!`;
+    header += `\n\n<@${winnerId}> (${winner}) wins!`;
   } else if (isDraw) {
-    header += `\n\n It's a draw!`;
+    header += `\n\nIt's a draw!`;
   } else if (oPlayerId) {
     const currentPlayerId = currentTurn === "X" ? xPlayerId : oPlayerId;
     header += `\n\nIt's <@${currentPlayerId}>'s turn (${currentTurn}).`;
@@ -323,6 +363,7 @@ function makeTttComponents(gameId, game) {
 
   return rows;
 }
+
 
 // -------------------------
 // Interactions endpoint
@@ -741,31 +782,39 @@ app.post(
 
       // TIC TAC TOE (yours)
       if (name === "tictactoe") {
-        const tttCommand = ALL_COMMANDS.find((cmd) => cmd.name === "tictactoe");
-        if (tttCommand) incrementCommandUsage(userId, tttCommand);
+      const tttCommand = ALL_COMMANDS.find((cmd) => cmd.name === "tictactoe");
+      if (tttCommand) incrementCommandUsage(userId, tttCommand);
 
-        const gameId = id;
+      const gameId = id;
 
-        tttGames[gameId] = {
-          xPlayerId: userId,
-          oPlayerId: null,
-          board: makeEmptyBoard(),
-          currentTurn: "X",
-          isFinished: false,
-          winner: null,
-          isDraw: false,
-        };
+      // bot or player
+      const modeOption = data.options?.find((o) => o.name === "mode");
+      const modeValue = modeOption?.value?.toString().toLowerCase();
+      const playVsBot = !modeValue || modeValue === "bot";
 
-        const game = tttGames[gameId];
 
-        return res.send({
-          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: {
-            content: makeTttText(game),
-            components: makeTttComponents(gameId, game),
-          },
-        });
-      }
+      tttGames[gameId] = {
+        xPlayerId: userId,
+        oPlayerId: playVsBot ? TTT_BOT_ID : null,
+        isVsBot: playVsBot,
+        board: makeEmptyBoard(),
+        currentTurn: "X",
+        isFinished: false,
+        winner: null,
+        isDraw: false,
+      };
+
+      const game = tttGames[gameId];
+
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          content: makeTttText(game),
+          components: makeTttComponents(gameId, game),
+        },
+      });
+    }
+
 
       // GUESS THE SONG WITH GENRES (Slash Command)
       if (name === "guesssong") {
@@ -1383,6 +1432,150 @@ app.post(
             },
           });
         }
+      }
+
+
+            // TIC TAC TOE ACCEPT BUTTON (PvP join)
+      if (componentId.startsWith("ttt_accept_")) {
+        const gameId = componentId.replace("ttt_accept_", "");
+        const game = tttGames[gameId];
+
+        if (!game) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags: InteractionResponseFlags.EPHEMERAL,
+              content: "Game not found or expired.",
+            },
+          });
+        }
+
+        // Don't let the creator accept their own game
+        if (game.xPlayerId === userId) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags: InteractionResponseFlags.EPHEMERAL,
+              content: "You can't accept your own Tic Tac Toe challenge.",
+            },
+          });
+        }
+
+        // If someone already joined, block double-joins
+        if (game.oPlayerId && game.oPlayerId !== TTT_BOT_ID) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags: InteractionResponseFlags.EPHEMERAL,
+              content: "Someone has already joined this game.",
+            },
+          });
+        }
+
+        // Set O player to the accepter, ensure it's PvP
+        game.oPlayerId = userId;
+        game.isVsBot = false;
+
+        return res.send({
+          type: InteractionResponseType.UPDATE_MESSAGE,
+          data: {
+            content: makeTttText(game),
+            components: makeTttComponents(gameId, game),
+          },
+        });
+      }
+
+
+      // TIC TAC TOE MOVE BUTTON
+      if (componentId.startsWith("ttt_move_")) {
+        const parts = componentId.split("_"); // ["ttt", "move", gameId, index]
+        const gameId = parts[2];
+        const index = Number(parts[3]);
+
+        const game = tttGames[gameId];
+        if (!game) {
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+            data: {
+              content: "Game not found or expired.",
+              components: [],
+            },
+          });
+        }
+
+        if (game.isFinished) {
+          return res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+            data: {
+              content: makeTttText(game),
+              components: makeTttComponents(gameId, game),
+            },
+          });
+        }
+
+        const playerId = userId;
+        const { xPlayerId, oPlayerId, currentTurn, board, isVsBot } = game;
+
+        // Enforce turn & ownership
+        if (currentTurn === "X" && playerId !== xPlayerId) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags: InteractionResponseFlags.EPHEMERAL,
+              content: "It's not your turn.",
+            },
+          });
+        }
+        if (!isVsBot && currentTurn === "O" && playerId !== oPlayerId) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags: InteractionResponseFlags.EPHEMERAL,
+              content: "It's not your turn.",
+            },
+          });
+        }
+
+        if (board[index] !== null) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              flags: InteractionResponseFlags.EPHEMERAL,
+              content: "That square is already taken.",
+            },
+          });
+        }
+
+        // Player move
+        board[index] = currentTurn;
+
+        // Check game state after player move
+        const winner = checkTttWinner(board);
+        if (winner) {
+          game.winner = winner;
+          game.isFinished = true;
+          game.isDraw = false;
+        } else if (isBoardFull(board)) {
+          game.isDraw = true;
+          game.isFinished = true;
+        } else {
+          // If vs bot, switch to bot and let it play
+          if (isVsBot) {
+            game.currentTurn = "O";
+            botMakeMove(game); // bot picks random square and maybe ends game
+          } else {
+            // swap turn for PvP
+            game.currentTurn = currentTurn === "X" ? "O" : "X";
+          }
+        }
+
+        return res.send({
+          type: InteractionResponseType.UPDATE_MESSAGE,
+          data: {
+            content: makeTttText(game),
+            components: makeTttComponents(gameId, game),
+          },
+        });
       }
 
       return;
