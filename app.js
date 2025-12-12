@@ -22,6 +22,7 @@ import {
 } from "./game.js";
 import { incrementCommandUsage } from "./db/commandUsage.js";
 import { ALL_COMMANDS } from "./commands.js";
+import { generateUsageChart } from "./chartGenerator.js";
 
 const winLoss = Object.create(null);
 const app = express();
@@ -57,6 +58,18 @@ const BOT_THEME = {
   exampleCommands: [
     "/test - Test the bot's response",
     "/challenge <choice> - Start a Rock Paper Scissors game with a friend",
+    "/blackjack - Play a simple game of Blackjack against the dealer",
+    "/coinflip - Flip a coin and get heads or tails",
+    "/guesssong - Play 'Guess the Song' from emojis (choose a genre first)",
+    "/hangman - Play Hangman with your friends (guess the word by letters)",
+    "/typerace - Start a typing race; host begins the race, players submit typing",
+    "/submit - Submit your typed passage for an active typing race",
+    "/higherlower - Play Higher or Lower with a shuffled deck of cards",
+    "/zodiac - Enter your birth date to get a fun astrology fact",
+    "/tictactoe - Start a Tic Tac Toe challenge that anyone can accept",
+    "/joke - Get a random joke or pick a specific one by number",
+    "/usages - View your command usage statistics as a chart",
+    "/rules - Show the bot theme, rules, and example commands",
   ],
 };
 
@@ -363,7 +376,6 @@ function makeTttComponents(gameId, game) {
 
   return rows;
 }
-
 
 // -------------------------
 // Interactions endpoint
@@ -782,39 +794,37 @@ app.post(
 
       // TIC TAC TOE (yours)
       if (name === "tictactoe") {
-      const tttCommand = ALL_COMMANDS.find((cmd) => cmd.name === "tictactoe");
-      if (tttCommand) incrementCommandUsage(userId, tttCommand);
+        const tttCommand = ALL_COMMANDS.find((cmd) => cmd.name === "tictactoe");
+        if (tttCommand) incrementCommandUsage(userId, tttCommand);
 
-      const gameId = id;
+        const gameId = id;
 
-      // bot or player
-      const modeOption = data.options?.find((o) => o.name === "mode");
-      const modeValue = modeOption?.value?.toString().toLowerCase();
-      const playVsBot = !modeValue || modeValue === "bot";
+        // bot or player
+        const modeOption = data.options?.find((o) => o.name === "mode");
+        const modeValue = modeOption?.value?.toString().toLowerCase();
+        const playVsBot = !modeValue || modeValue === "bot";
 
+        tttGames[gameId] = {
+          xPlayerId: userId,
+          oPlayerId: playVsBot ? TTT_BOT_ID : null,
+          isVsBot: playVsBot,
+          board: makeEmptyBoard(),
+          currentTurn: "X",
+          isFinished: false,
+          winner: null,
+          isDraw: false,
+        };
 
-      tttGames[gameId] = {
-        xPlayerId: userId,
-        oPlayerId: playVsBot ? TTT_BOT_ID : null,
-        isVsBot: playVsBot,
-        board: makeEmptyBoard(),
-        currentTurn: "X",
-        isFinished: false,
-        winner: null,
-        isDraw: false,
-      };
+        const game = tttGames[gameId];
 
-      const game = tttGames[gameId];
-
-      return res.send({
-        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: {
-          content: makeTttText(game),
-          components: makeTttComponents(gameId, game),
-        },
-      });
-    }
-
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: makeTttText(game),
+            components: makeTttComponents(gameId, game),
+          },
+        });
+      }
 
       // GUESS THE SONG WITH GENRES (Slash Command)
       if (name === "guesssong") {
@@ -845,6 +855,128 @@ app.post(
                       { label: "Pop", value: "pop" },
                       { label: "Hip-Hop", value: "hiphop" },
                     ],
+                  },
+                ],
+              },
+            ],
+          },
+        });
+      }
+
+      // HANGMAN (main)
+
+      if (name === "hangman") {
+        const lengthOption = options?.find((o) => o.name === "number");
+
+        const requestedLength = lengthOption
+          ? Number(lengthOption.value)
+          : null;
+
+        let word = null;
+
+        if (requestedLength) word = pickWordByLength(requestedLength);
+
+        if (!word) word = pickRandomWord();
+
+        if (!word) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+
+            data: { content: "Sorry — no words available right now." },
+          });
+        }
+
+        activeHangmanGames[id] = {
+          word,
+
+          guessed: [],
+
+          wrong: 0,
+
+          wrongLetters: [],
+
+          maxWrong: 6,
+
+          host: userId,
+        };
+
+        const letters = "abcdefghijklmnopqrstuvwxyz".split("");
+
+        const first = letters
+
+          .slice(0, 13)
+
+          .map((ch) => ({ label: ch.toUpperCase(), value: ch }));
+
+        const second = letters
+
+          .slice(13)
+
+          .map((ch) => ({ label: ch.toUpperCase(), value: ch }));
+
+        const masked = maskWord(word, []);
+
+        const hangmanCmd = ALL_COMMANDS.find((c) => c.name === "hangman");
+
+        if (hangmanCmd) incrementCommandUsage(userId, hangmanCmd);
+
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+
+          data: {
+            flags: InteractionResponseFlags.IS_COMPONENTS_V2,
+
+            components: [
+              {
+                type: MessageComponentTypes.TEXT_DISPLAY,
+
+                content: `Hangman started by <@${userId}> — Word: \`${masked}\`  (wrong: 0/6)`,
+              },
+
+              {
+                type: MessageComponentTypes.ACTION_ROW,
+
+                components: [
+                  {
+                    type: MessageComponentTypes.STRING_SELECT,
+
+                    custom_id: `hangman_guess_${id}_1`,
+
+                    placeholder: "Guess a letter (A-M)",
+
+                    options: first,
+                  },
+                ],
+              },
+
+              {
+                type: MessageComponentTypes.ACTION_ROW,
+
+                components: [
+                  {
+                    type: MessageComponentTypes.STRING_SELECT,
+
+                    custom_id: `hangman_guess_${id}_2`,
+
+                    placeholder: "Guess a letter (N-Z)",
+
+                    options: second,
+                  },
+                ],
+              },
+
+              {
+                type: MessageComponentTypes.ACTION_ROW,
+
+                components: [
+                  {
+                    type: MessageComponentTypes.BUTTON,
+
+                    custom_id: `hangman_solve_${id}`,
+
+                    label: "Solve",
+
+                    style: ButtonStyleTypes.SECONDARY,
                   },
                 ],
               },
@@ -954,8 +1086,381 @@ app.post(
         });
       }
 
+      // USAGES
+
+      if (name === "usages") {
+        const usagesCommand = ALL_COMMANDS.find((cmd) => cmd.name === "usages");
+
+        if (usagesCommand) incrementCommandUsage(userId, usagesCommand);
+
+        // Check if targeting a specific user
+
+        const userOption = options?.find((opt) => opt.name === "user");
+
+        const targetUserId = userOption ? userOption.value : userId;
+
+        const isTargetingSelf = targetUserId === userId;
+
+        // Send deferred response first (since chart generation can take a moment)
+
+        res.send({
+          type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+        });
+
+        // Generate and send chart asynchronously
+
+        (async () => {
+          try {
+            const chartBuffer = await generateUsageChart(targetUserId);
+
+            // Upload the chart as an attachment using followup webhook
+
+            const webhookUrl = `https://discord.com/api/v10/webhooks/${process.env.APP_ID}/${req.body.token}`;
+
+            const FormData = (await import("form-data")).default;
+
+            const axios = (await import("axios")).default;
+
+            const form = new FormData();
+
+            // Add payload_json first with all message data
+
+            const content = isTargetingSelf
+              ? "📊 **Your Command Usage Statistics** 📊"
+              : `📊 **Command Usage Statistics for <@${targetUserId}>** 📊`;
+
+            const payload = {
+              content: content,
+            };
+
+            form.append("payload_json", JSON.stringify(payload));
+
+            // Add the file
+
+            form.append("files[0]", chartBuffer, "usage-chart.png");
+
+            // Send using axios which handles FormData streams properly
+
+            const response = await axios.post(webhookUrl, form, {
+              headers: form.getHeaders(),
+            });
+
+            console.log("Successfully sent chart!");
+          } catch (err) {
+            console.error("Error generating usage chart:", err);
+
+            // Send error as followup
+
+            const webhookUrl = `https://discord.com/api/v10/webhooks/${process.env.APP_ID}/${req.body.token}`;
+
+            try {
+              await fetch(webhookUrl, {
+                method: "POST",
+
+                headers: {
+                  "Content-Type": "application/json",
+                },
+
+                body: JSON.stringify({
+                  content:
+                    "Sorry, there was an error generating your usage chart.",
+
+                  flags: InteractionResponseFlags.EPHEMERAL,
+                }),
+              });
+            } catch (followupErr) {
+              console.error("Error sending followup error:", followupErr);
+            }
+          }
+        })();
+
+        return;
+      }
+
       console.error(`unknown command: ${name}`);
       return res.status(400).json({ error: "unknown command" });
+    }
+
+    // Handle modal submissions (solve modal)
+
+    if (type === InteractionType.MODAL_SUBMIT) {
+      const modalId = data.custom_id; // e.g. hangman_solve_modal_<gameId>
+
+      // Handle TypeRace modal submissions
+
+      if (
+        typeof modalId === "string" &&
+        modalId.startsWith("typerace_modal_")
+      ) {
+        // modalId format: typerace_modal_<gameId>_<userId>
+
+        const parts = modalId.split("_");
+
+        const gameId = parts[2];
+
+        const userId = parts.slice(3).join("_");
+
+        const game = activeTypeRaces[gameId];
+
+        if (!game) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+
+            data: {
+              flags: InteractionResponseFlags.EPHEMERAL,
+
+              content: "Race not found.",
+            },
+          });
+        }
+
+        // extract typed value
+
+        let typed = null;
+
+        try {
+          const comps = req.body.data?.components || [];
+
+          if (comps[0] && comps[0].components && comps[0].components[0]) {
+            typed = comps[0].components[0].value;
+          }
+        } catch (err) {
+          console.error("typerace modal parse error", err);
+        }
+
+        if (!typed) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+
+            data: {
+              flags: InteractionResponseFlags.EPHEMERAL,
+
+              content: "No input received.",
+            },
+          });
+        }
+
+        const submitTime = Date.now();
+
+        const elapsed = Math.max(
+          0,
+
+          submitTime - (game.startTime || submitTime)
+        );
+
+        const { computeStats } = await import("./typerace.js");
+
+        const stats = computeStats(game.passage, typed, elapsed);
+
+        // record result
+
+        game.results.push({ userId: callerId, ...stats });
+
+        // update public message leaderboard (we'll try to UPDATE_MESSAGE)
+
+        try {
+          const rows = game.results
+
+            .slice()
+
+            .sort((a, b) => b.netWPM - a.netWPM)
+
+            .map(
+              (r, i) =>
+                `${i + 1}. <@${r.userId}> — ${r.netWPM} WPM (${Math.round(
+                  r.accuracy * 100
+                )}%)`
+            )
+
+            .join("\n");
+
+          await res.send({
+            type: InteractionResponseType.UPDATE_MESSAGE,
+
+            data: {
+              components: [
+                {
+                  type: MessageComponentTypes.TEXT_DISPLAY,
+
+                  content: `Type Race — passage:\n\`${game.passage}\`\n\nLeaderboard:\n${rows}`,
+                },
+              ],
+            },
+          });
+        } catch (err) {
+          console.error("typerace modal update error", err);
+        }
+
+        return;
+      }
+
+      if (
+        typeof modalId === "string" &&
+        modalId.startsWith("hangman_solve_modal_")
+      ) {
+        const gameId = modalId.replace("hangman_solve_modal_", "");
+
+        const game = activeHangmanGames[gameId];
+
+        // modal components structure: data.components[0].components[0].value
+
+        let guess = null;
+
+        try {
+          const comps = req.body.data?.components || [];
+
+          if (comps[0] && comps[0].components && comps[0].components[0]) {
+            guess = comps[0].components[0].value;
+          }
+        } catch (err) {
+          console.error("hangman modal parse error", err);
+        }
+
+        if (!game) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+
+            data: {
+              flags: InteractionResponseFlags.EPHEMERAL,
+
+              content: "This hangman game no longer exists.",
+            },
+          });
+        }
+
+        if (!guess) {
+          return res.send({
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+
+            data: {
+              flags: InteractionResponseFlags.EPHEMERAL,
+
+              content: "No guess received.",
+            },
+          });
+        }
+
+        const normalized = String(guess).trim().toLowerCase();
+
+        if (normalized === game.word.toLowerCase()) {
+          // correct: try to update the original message if available
+
+          try {
+            if (req.body.message && req.body.message.id) {
+              console.log(game.wrongLetters);
+
+              await res.send({
+                type: InteractionResponseType.UPDATE_MESSAGE,
+
+                data: {
+                  components: [
+                    {
+                      type: MessageComponentTypes.TEXT_DISPLAY,
+
+                      content: `🎉 <@${
+                        req.body.member?.user?.id ?? req.body.user?.id
+                      }> solved the word! **${game.word}** (wrong: ${
+                        game.wrong
+                      }/${game.maxWrong}${
+                        game.wrongLetters.length
+                          ? " — wrong letters/guesses: " +
+                            game.wrongLetters.join(", ")
+                          : ""
+                      })`,
+                    },
+                  ],
+                },
+              });
+            } else {
+              // fallback: post a public message
+
+              await res.send({
+                type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+
+                data: {
+                  content: `🎉 <@${
+                    req.body.member?.user?.id ?? req.body.user?.id
+                  }> solved the hangman: **${game.word}**`,
+                },
+              });
+            }
+          } catch (err) {
+            console.error("hangman modal update error", err);
+          }
+
+          delete activeHangmanGames[gameId];
+        } else {
+          // incorrect: record as a wrong guess. Respond ONCE depending on outcome:
+
+          // - if this guess causes game over, update the original message (public)
+
+          // - otherwise reply ephemerally to the submitter
+
+          game.wrong++;
+
+          game.wrongLetters.push(guess.toUpperCase());
+
+          console.log("Added wrong: " + game.wrongLetters);
+
+          if (game.wrong >= game.maxWrong) {
+            // game over: update original message if possible, otherwise send a public message
+
+            try {
+              if (req.body.message && req.body.message.id) {
+                await res.send({
+                  type: InteractionResponseType.UPDATE_MESSAGE,
+
+                  data: {
+                    components: [
+                      {
+                        type: MessageComponentTypes.TEXT_DISPLAY,
+
+                        content: `☠️ Game over — the word was **${
+                          game.word
+                        }** (wrong: ${game.wrong}/${
+                          game.maxWrong
+                        } — wrong letters/guesses: ${game.wrongLetters.join(
+                          ", "
+                        )})`,
+                      },
+                    ],
+                  },
+                });
+              } else {
+                await res.send({
+                  type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+
+                  data: {
+                    content: `☠️ Game over — the word was **${game.word}**`,
+                  },
+                });
+              }
+            } catch (err) {
+              console.error("hangman modal endgame update error", err);
+            }
+
+            delete activeHangmanGames[gameId];
+          } else {
+            // not game over: send an ephemeral notice about the incorrect attempt
+
+            try {
+              await res.send({
+                type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+
+                data: {
+                  flags: InteractionResponseFlags.EPHEMERAL,
+
+                  content: `Incorrect solve attempt: **${guess}** — (${game.wrong}/${game.maxWrong} wrong)`,
+                },
+              });
+            } catch (err) {
+              console.error("hangman modal incorrect reply error", err);
+            }
+          }
+        }
+
+        return;
+      }
     }
 
     // -----------------------------------------
@@ -1434,8 +1939,7 @@ app.post(
         }
       }
 
-
-            // TIC TAC TOE ACCEPT BUTTON (PvP join)
+      // TIC TAC TOE ACCEPT BUTTON (PvP join)
       if (componentId.startsWith("ttt_accept_")) {
         const gameId = componentId.replace("ttt_accept_", "");
         const game = tttGames[gameId];
@@ -1484,7 +1988,6 @@ app.post(
           },
         });
       }
-
 
       // TIC TAC TOE MOVE BUTTON
       if (componentId.startsWith("ttt_move_")) {
